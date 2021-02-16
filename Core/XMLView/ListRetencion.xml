@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
- * @author Carlos García Gómez          <carlos@facturascripts.com>  
+ * @author Carlos García Gómez          <carlos@facturascripts.com>
  * @author Cristo M. Estévez Hernández  <cristom.estevez@gmail.com>
 -->
 <view>
@@ -27,8 +27,18 @@
         <column name="description" order="110">
             <widget type="textarea" fieldname="descripcion" />
         </column>
-        <column name="percentage" numcolumns="2" order="120">
-            <widget type="number" decimal="2" fieldname="porcentaje" required="true" />
+        <column name="percentage" display="right" order="120">
+            <widget type="percentage" decimal="2" fieldname="porcentaje" />
+        </column>
+        <column name="subaccount-irpf" order="130">
+            <widget type="autocomplete" fieldname="codsubcuentaret">
+                <values source="subcuentas" fieldcode="codsubcuenta" fieldtitle="descripcion" />
+            </widget>
+        </column>
+        <column name="subaccount-irpf-creditor" order="140">
+            <widget type="autocomplete" fieldname="codsubcuentaacr">
+                <values source="subcuentas" fieldcode="codsubcuenta" fieldtitle="descripcion" />
+            </widget>
         </column>
     </columns>
 </view>

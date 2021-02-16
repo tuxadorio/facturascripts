@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -48,6 +48,18 @@ class CuentaBanco extends Base\BankAccount
     public $idempresa;
 
     /**
+     *
+     * @var string
+     */
+    public $sufijosepa;
+
+    public function clear()
+    {
+        parent::clear();
+        $this->sufijosepa = '000';
+    }
+
+    /**
      * This function is called when creating the model table. Returns the SQL
      * that will be executed after the creation of the table. Useful to insert values
      * default.
@@ -63,16 +75,6 @@ class CuentaBanco extends Base\BankAccount
     }
 
     /**
-     * Returns the name of the column that is the model's primary key.
-     *
-     * @return string
-     */
-    public static function primaryColumn()
-    {
-        return 'codcuenta';
-    }
-
-    /**
      * Returns the name of the table that uses this model.
      *
      * @return string
@@ -80,6 +82,20 @@ class CuentaBanco extends Base\BankAccount
     public static function tableName()
     {
         return 'cuentasbanco';
+    }
+
+    /**
+     * 
+     * @return bool
+     */
+    public function test()
+    {
+        if (empty($this->idempresa)) {
+            $this->idempresa = $this->toolBox()->appSettings()->get('default', 'idempresa');
+        }
+
+        $this->sufijosepa = $this->toolBox()->utils()->noHtml($this->sufijosepa);
+        return parent::test();
     }
 
     /**

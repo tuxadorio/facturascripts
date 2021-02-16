@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,7 +19,9 @@
 namespace FacturaScripts\Core\Model;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Dinamic\Model\Cuenta as DinCuenta;
+use FacturaScripts\Dinamic\Model\CuentaEspecial as DinCuentaEspecial;
+use FacturaScripts\Dinamic\Model\Partida as DinPartida;
 
 /**
  * Detail level of an accounting plan. It is related to a single account.
@@ -31,6 +33,7 @@ class Subcuenta extends Base\ModelClass
 {
 
     use Base\ModelTrait;
+    use Base\ExerciseRelationTrait;
 
     /**
      * Account code.
@@ -47,20 +50,6 @@ class Subcuenta extends Base\ModelClass
     public $codcuentaesp;
 
     /**
-     * Exercise code.
-     *
-     * @var string
-     */
-    public $codejercicio;
-
-    /**
-     * Tax code.
-     *
-     * @var string
-     */
-    public $codimpuesto;
-
-    /**
      * Sub-account code.
      *
      * @var string
@@ -75,12 +64,6 @@ class Subcuenta extends Base\ModelClass
     public $debe;
 
     /**
-     *
-     * @var Ejercicio[]
-     */
-    private static $ejercicios;
-
-    /**
      * Description of the subaccount.
      *
      * @var string
@@ -91,7 +74,7 @@ class Subcuenta extends Base\ModelClass
      *
      * @var bool
      */
-    private static $disableAditionTest = false;
+    private $disableAditionalTest = false;
 
     /**
      * Amount of credit.
@@ -101,7 +84,7 @@ class Subcuenta extends Base\ModelClass
     public $haber;
 
     /**
-     * ID of the account to which it belongs.
+     * Account identifier.
      *
      * @var int
      */
@@ -127,70 +110,74 @@ class Subcuenta extends Base\ModelClass
     public function clear()
     {
         parent::clear();
-        $this->codejercicio = $this->getDefaultCodejercicio();
+        $this->codejercicio = $this->getExercise()->codejercicio;
         $this->debe = 0.0;
         $this->haber = 0.0;
         $this->saldo = 0.0;
     }
 
     /**
+     * Removes this subaccount from the database.
      * 
+     * @return bool
      */
-    public function disableAditionalTest()
+    public function delete()
     {
-        self::$disableAditionTest = true;
+        if ($this->getExercise()->isOpened() || $this->disableAditionalTest) {
+            return parent::delete();
+        }
+
+        $this->toolBox()->i18nLog()->warning('closed-exercise', ['%exerciseName%' => $this->getExercise()->nombre]);
+        return false;
     }
 
     /**
      * 
+     * @param bool $value
+     */
+    public function disableAditionalTest(bool $value)
+    {
+        $this->disableAditionalTest = $value;
+    }
+
+    /**
+     * Returns the parent account.
+     *
+     * @return DinCuenta
+     */
+    public function getAccount()
+    {
+        $account = new DinCuenta();
+
+        /// find account by id
+        if (!empty($this->idcuenta) && $account->loadFromCode($this->idcuenta) && $account->codejercicio === $this->codejercicio) {
+            return $account;
+        }
+
+        /// find account by code and exercise
+        $where = [
+            new DataBaseWhere('codcuenta', $this->codcuenta),
+            new DataBaseWhere('codejercicio', $this->codejercicio)
+        ];
+        $account->loadFromCode('', $where);
+        return $account;
+    }
+
+    /**
+     * Returns the related special account code.
+     *
      * @return string
      */
     public function getSpecialAccountCode()
     {
         if (empty($this->codcuentaesp)) {
-            $account = new Cuenta();
-            if ($account->loadFromCode($this->idcuenta)) {
+            $account = $this->getAccount();
+            if ($account->exists()) {
                 return $account->codcuentaesp;
             }
         }
 
         return $this->codcuentaesp;
-    }
-
-    /**
-     * Load de ID for account
-     *
-     * @return int
-     */
-    public function getIdAccount(): int
-    {
-        $where = [
-            new DataBaseWhere('codejercicio', $this->codejercicio),
-            new DataBaseWhere('codcuenta', $this->codcuenta),
-        ];
-        $account = new Cuenta();
-        $account->loadFromCode('', $where);
-
-        return $account->idcuenta;
-    }
-
-    /**
-     * Load de ID for subAccount
-     *
-     * @return int
-     */
-    public function getIdSubaccount(): int
-    {
-        $where = [
-            new DataBaseWhere('codejercicio', $this->codejercicio),
-            new DataBaseWhere('codsubcuenta', $this->codsubcuenta),
-        ];
-        $subaccount = new Subcuenta();
-        foreach ($subaccount->all($where) as $subc) {
-            return $subc->idsubcuenta;
-        }
-
-        return 0;
     }
 
     /**
@@ -203,8 +190,8 @@ class Subcuenta extends Base\ModelClass
     public function install()
     {
         /// force the parents tables
-        new CuentaEspecial();
-        new Cuenta();
+        new DinCuentaEspecial();
+        new DinCuenta();
 
         return parent::install();
     }
@@ -217,6 +204,29 @@ class Subcuenta extends Base\ModelClass
     public static function primaryColumn()
     {
         return 'idsubcuenta';
+    }
+
+    /**
+     *
+     * @return string
+     */
+    public function primaryDescriptionColumn()
+    {
+        return 'codsubcuenta';
+    }
+
+    /**
+     * 
+     * @return bool
+     */
+    public function save()
+    {
+        if ($this->getExercise()->isOpened() || $this->disableAditionalTest) {
+            return parent::save();
+        }
+
+        $this->toolBox()->i18nLog()->warning('closed-exercise', ['%exerciseName%' => $this->getExercise()->nombre]);
+        return false;
     }
 
     /**
@@ -236,76 +246,81 @@ class Subcuenta extends Base\ModelClass
      */
     public function test()
     {
-        $this->codcuenta = trim($this->codcuenta);
-        $this->codsubcuenta = trim($this->codsubcuenta);
-        $this->descripcion = Utils::noHtml($this->descripcion);
-        if (strlen($this->descripcion) < 1 || strlen($this->descripcion) > 255) {
-            self::$miniLog->alert(self::$i18n->trans('invalid-column-lenght', ['%column%' => 'descripcion', '%min%' => '1', '%max%' => '255']));
+        $this->saldo = $this->debe - $this->haber;
+
+        $this->codcuenta = \trim($this->codcuenta);
+        $this->codsubcuenta = empty($this->idsubcuenta) ? $this->transformCodsubcuenta($this->codsubcuenta) : \trim($this->codsubcuenta);
+        $this->descripcion = $this->toolBox()->utils()->noHtml($this->descripcion);
+        if (\strlen($this->descripcion) < 1 || \strlen($this->descripcion) > 255) {
+            $this->toolBox()->i18nLog()->warning(
+                'invalid-column-lenght',
+                ['%column%' => 'descripcion', '%min%' => '1', '%max%' => '255']
+            );
             return false;
         }
 
-        if (!self::$disableAditionTest) {
-            if (!$this->testErrorInLengthSubAccount()) {
-                self::$miniLog->alert(self::$i18n->trans('account-length-error'));
-                return false;
-            }
-
-            $this->idcuenta = $this->getIdAccount();
-            if (empty($this->idcuenta)) {
-                self::$miniLog->alert(self::$i18n->trans('account-data-error'));
-                return false;
-            }
+        /// check exercise
+        $exercise = $this->getExercise();
+        if (!$this->disableAditionalTest && \strlen($this->codsubcuenta) !== $exercise->longsubcuenta) {
+            $this->toolBox()->i18nLog()->warning('account-length-error', ['%code%' => $this->codsubcuenta]);
+            return false;
         }
+
+        /// sets account data
+        $account = $this->getAccount();
+        $this->codcuenta = $account->codcuenta;
+        $this->idcuenta = $account->idcuenta;
 
         return parent::test();
     }
 
     /**
+     * Transform subaccount code if necesary
      * 
-     * @param string $date
-     * @param float $debit
-     * @param float $credit
+     * @param string $code
      *
-     * @return bool
+     * @return string
      */
-    public function updateBalance(string $date, float $debit, float $credit): bool
+    public function transformCodsubcuenta(string $code): string
     {
-        $balance = $debit - $credit;
-        $month = (int) date("n", strtotime($date));
-        $detail = new SubcuentaSaldo();
-        $detail->idsubcuenta = $this->idsubcuenta;
-
-        $inTransaction = self::$dataBase->inTransaction();
-        try {
-            self::$dataBase->beginTransaction();
-
-            if (!$detail->updateBalance($month, $debit, $credit)) {
-                return false;
-            }
-
-            $sql = 'UPDATE ' . static::tableName() . ' SET '
-                . ' debe = debe + ' . $debit
-                . ',haber = haber + ' . $credit
-                . ',saldo = saldo + ' . $balance
-                . ' WHERE idsubcuenta = ' . $this->idsubcuenta;
-            self::$dataBase->exec($sql);
-
-            /// save transaction
-            if ($inTransaction === false) {
-                self::$dataBase->commit();
-            }
-        } catch (\Exception $e) {
-            self::$miniLog->error($e->getMessage());
-            return false;
-        } finally {
-            if (!$inTransaction && self::$dataBase->inTransaction()) {
-                self::$dataBase->rollback();
-                self::$miniLog->alert(self::$i18n->trans('update-account-balance-error'));
-                return false;
-            }
+        if (\strpos($code, '.') === false) {
+            return \trim($code);
         }
 
-        return true;
+        $parts = \explode('.', \trim($code));
+        if (\count($parts) === 2) {
+            return \str_pad($parts[0], $this->getExercise()->longsubcuenta - \strlen($parts[1]), '0', \STR_PAD_RIGHT) . $parts[1];
+        }
+
+        return \trim($code);
+    }
+
+    /**
+     * Update subaccount balance.
+     * 
+     * @param float $debit
+     * @param float $credit
+     */
+    public function updateBalance($debit = 0.0, $credit = 0.0)
+    {
+        /// supplied debit and credit?
+        if ($debit + $credit != 0.0) {
+            $this->debe += $debit;
+            $this->haber += $credit;
+            $this->save();
+            return;
+        }
+
+        /// calculate account balance
+        $sql = "SELECT COALESCE(SUM(debe), 0) as debe, COALESCE(SUM(haber), 0) as haber"
+            . " FROM " . DinPartida::tableName()
+            . " WHERE idsubcuenta = " . self::$dataBase->var2str($this->idsubcuenta) . ";";
+
+        foreach (self::$dataBase->select($sql) as $row) {
+            $this->debe = (float) $row['debe'];
+            $this->haber = (float) $row['haber'];
+            $this->save();
+        }
     }
 
     /**
@@ -316,66 +331,8 @@ class Subcuenta extends Base\ModelClass
      *
      * @return string
      */
-    public function url(string $type = 'auto', string $list = 'List')
+    public function url(string $type = 'auto', string $list = 'ListCuenta?activetab=List')
     {
-        return parent::url($type, 'ListCuenta?activetab=List');
-    }
-
-    /**
-     * 
-     * @return string
-     */
-    protected function getDefaultCodejercicio()
-    {
-        if (empty(self::$ejercicios)) {
-            $exerciseModel = new Ejercicio();
-            self::$ejercicios = $exerciseModel->all();
-        }
-
-        foreach (self::$ejercicios as $eje) {
-            return $eje->codejercicio;
-        }
-
-        return '';
-    }
-
-    /**
-     * Insert the model data in the database.
-     *
-     * @param array $values
-     *
-     * @return bool
-     */
-    protected function saveInsert(array $values = [])
-    {
-        if (parent::saveInsert($values)) {
-            $accountBalance = new SubcuentaSaldo();
-            $accountBalance->idcuenta = $this->idcuenta;
-            $accountBalance->idsubcuenta = $this->idsubcuenta;
-            for ($index = 1; $index < 13; $index++) {
-                $accountBalance->mes = $index;
-                $accountBalance->id = null;
-                $accountBalance->save();
-            }
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if exists error in long of subaccount. Returns FALSE if error.
-     *
-     * @return bool
-     */
-    private function testErrorInLengthSubAccount(): bool
-    {
-        foreach (self::$ejercicios as $eje) {
-            if ($eje->codejercicio === $this->codejercicio) {
-                return strlen($this->codsubcuenta) == $eje->longsubcuenta;
-            }
-        }
-
-        return false;
+        return parent::url($type, $list);
     }
 }

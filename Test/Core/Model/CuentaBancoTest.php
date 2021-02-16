@@ -1,8 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017       Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
- * Copyright (C) 2017-2018  Carlos Garcia Gomez     <carlos@facturascripts.com>
+ * Copyright (C) 2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -23,15 +22,40 @@ use FacturaScripts\Core\Model\CuentaBanco;
 use FacturaScripts\Test\Core\CustomTest;
 
 /**
- * @covers \CuentaBanco
+ * Description of CuentaBancoTest
  *
- * @author Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
+ * @author Carlos Garcia Gomez <carlos@facturascripts.com>
+ * @covers \FacturaScripts\Core\Model\CuentaBanco
  */
-final class CuentaBancoTest extends CustomTest
+class CuentaBancoTest extends CustomTest
 {
 
     protected function setUp()
     {
         $this->model = new CuentaBanco();
+    }
+
+    public function testSaveInsert()
+    {
+        $account = new CuentaBanco();
+        $account->descripcion = 'test';
+        $this->assertTrue($account->save());
+        $this->assertTrue($account->delete());
+    }
+
+    public function testIBAN()
+    {
+        /// save valid iban
+        $account = new CuentaBanco();
+        $account->descripcion = 'test';
+        $account->iban = 'ES91 2100 0418 4502 0005 1332';
+        $this->assertTrue($account->save());
+
+        /// now save invalid iban
+        $account->iban = '1234';
+        $this->assertFalse($account->save());
+
+        /// delete
+        $this->assertTrue($account->delete());
     }
 }

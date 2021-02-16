@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,20 +18,24 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Core\Lib\ExtendedController\BaseView;
+use FacturaScripts\Core\Lib\ExtendedController\EditController;
 
 /**
  * Controller to edit a single item from the Impuesto model
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Artex Trading sa <jcuello@artextrading.com>
- * @author Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
+ * @author Carlos García Gómez      <carlos@facturascripts.com>
+ * @author Artex Trading sa         <jcuello@artextrading.com>
+ * @author Francesc Pineda Segarra  <francesc.pineda.segarra@gmail.com>
  */
-class EditImpuesto extends ExtendedController\EditController
+class EditImpuesto extends EditController
 {
 
     /**
-     * Returns the model name
+     * Returns the model name.
+     * 
+     * @return string
      */
     public function getModelClassName()
     {
@@ -39,18 +43,46 @@ class EditImpuesto extends ExtendedController\EditController
     }
 
     /**
-     * Returns basic page attributes
+     * Returns basic page attributes.
      *
      * @return array
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'tax';
-        $pagedata['menu'] = 'accounting';
-        $pagedata['icon'] = 'fas fa-plus-square';
-        $pagedata['showonmenu'] = false;
+        $data = parent::getPageData();
+        $data['menu'] = 'accounting';
+        $data['title'] = 'tax';
+        $data['icon'] = 'fas fa-plus-square';
+        return $data;
+    }
 
-        return $pagedata;
+    protected function createViews()
+    {
+        parent::createViews();
+        $this->setTabsPosition('bottom');
+
+        $this->addListView('ListImpuestoZona', 'ImpuestoZona', 'zone-tax', 'fas fa-percent');
+        $this->views['ListImpuestoZona']->addOrderBy(['id'], 'code');
+        $this->views['ListImpuestoZona']->addOrderBy(['prioridad'], 'priority', 2);
+        $this->views['ListImpuestoZona']->disableColumn('tax');
+    }
+
+    /**
+     * 
+     * @param string   $viewName
+     * @param BaseView $view
+     */
+    protected function loadData($viewName, $view)
+    {
+        switch ($viewName) {
+            case 'ListImpuestoZona':
+                $codimpuesto = $this->getViewModelValue('EditImpuesto', 'codimpuesto');
+                $where = [new DataBaseWhere('codimpuesto', $codimpuesto)];
+                $view->loadData('', $where);
+                break;
+
+            default:
+                parent::loadData($viewName, $view);
+        }
     }
 }

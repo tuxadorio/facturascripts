@@ -1,0 +1,15 @@
+{
+    "default": {
+        "coddivisa": "ARS",
+        "codimpuesto": "AR21",
+        "codserie": "A",
+        "codpago": "CONT",
+        "tipoidfiscal": "CUIT"
+    },
+    "email": {
+        "enc": "ssl",
+        "host": "smtp.gmail.com",
+        "mailer": "smtp",
+        "port": "465"
+    }
+}

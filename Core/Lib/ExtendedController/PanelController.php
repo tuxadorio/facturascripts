@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,8 +18,8 @@
  */
 namespace FacturaScripts\Core\Lib\ExtendedController;
 
-use FacturaScripts\Core\Base;
-use FacturaScripts\Core\Model\User;
+use FacturaScripts\Core\Base\ControllerPermissions;
+use FacturaScripts\Dinamic\Model\User;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -36,7 +36,7 @@ abstract class PanelController extends BaseController
      *
      * @var bool
      */
-    public $hasData;
+    public $hasData = false;
 
     /**
      * Tabs position in page: left, bottom.
@@ -48,16 +48,12 @@ abstract class PanelController extends BaseController
     /**
      * Starts all the objects and properties.
      *
-     * @param Base\Cache      $cache
-     * @param Base\Translator $i18n
-     * @param Base\MiniLog    $miniLog
-     * @param string          $className
-     * @param string          $uri
+     * @param string $className
+     * @param string $uri
      */
-    public function __construct(&$cache, &$i18n, &$miniLog, $className, $uri = '')
+    public function __construct(string $className, string $uri = '')
     {
-        parent::__construct($cache, $i18n, $miniLog, $className, $uri);
-        $this->hasData = false;
+        parent::__construct($className, $uri);
         $this->setTabsPosition('left');
     }
 
@@ -71,66 +67,52 @@ abstract class PanelController extends BaseController
     }
 
     /**
-     * Return the value for a field in the model of the view.
-     *
-     * @param string $viewName
-     * @param string $fieldName
-     *
-     * @return mixed
-     */
-    public function getViewModelValue($viewName, $fieldName)
-    {
-        $model = $this->views[$viewName]->model;
-        return isset($model->{$fieldName}) ? $model->{$fieldName} : null;
-    }
-
-    /**
      * Runs the controller's private logic.
      *
-     * @param Response                   $response
-     * @param User                       $user
-     * @param Base\ControllerPermissions $permissions
+     * @param Response              $response
+     * @param User                  $user
+     * @param ControllerPermissions $permissions
      */
     public function privateCore(&$response, $user, $permissions)
     {
         parent::privateCore($response, $user, $permissions);
 
-        // Create the views to display
-        $this->createViews();
-
-        // Get any operations that have to be performed
+        /// Get any operations that have to be performed
         $action = $this->request->request->get('action', $this->request->query->get('action', ''));
 
-        // Run operations on the data before reading it
-        if (!$this->execPreviousAction($action)) {
+        /// Runs operations before reading data
+        if ($this->execPreviousAction($action) === false || $this->pipe('execPreviousAction', $action) === false) {
             return;
         }
 
-        // Load the model data for each view
-        $mainViewName = array_keys($this->views)[0];
+        /// Load the data for each view
+        $mainViewName = $this->getMainViewName();
         foreach ($this->views as $viewName => $view) {
-            if ($this->active == $viewName) {
+            /// disable views if main view has no data
+            if ($viewName != $mainViewName && false === $this->hasData) {
+                $this->setSettings($viewName, 'active', false);
+            }
+
+            if (false === $view->settings['active']) {
+                /// exclude inactive views
+                continue;
+            } elseif ($this->active == $viewName) {
                 $view->processFormData($this->request, 'load');
             } else {
                 $view->processFormData($this->request, 'preload');
             }
 
             $this->loadData($viewName, $view);
+            $this->pipe('loadData', $viewName, $view);
 
-            // check if we are processing the main view
-            if ($viewName == $mainViewName) {
-                $this->hasData = $view->count > 0;
-                continue;
-            }
-
-            // check if the view should be active
-            if ($view->settings['active']) {
-                $this->setSettings($viewName, 'active', $this->hasData);
+            if ($viewName === $mainViewName && $view->model->exists()) {
+                $this->hasData = true;
             }
         }
 
-        // General operations with the loaded data
+        /// General operations with the loaded data
         $this->execAfterAction($action);
+        $this->pipe('execAfterAction', $action);
     }
 
     /**
@@ -141,8 +123,7 @@ abstract class PanelController extends BaseController
     public function setTabsPosition($position)
     {
         $this->tabsPosition = $position;
-
-        switch ($position) {
+        switch ($this->tabsPosition) {
             case 'bottom':
                 $this->setTemplate('Master/PanelControllerBottom');
                 break;
@@ -154,7 +135,10 @@ abstract class PanelController extends BaseController
             default:
                 $this->tabsPosition = 'left';
                 $this->setTemplate('Master/PanelController');
-                break;
+        }
+
+        foreach (\array_keys($this->views) as $viewName) {
+            $this->views[$viewName]->settings['card'] = $this->tabsPosition !== 'top';
         }
     }
 
@@ -169,6 +153,7 @@ abstract class PanelController extends BaseController
     protected function addEditListView($viewName, $modelName, $viewTitle, $viewIcon = 'fas fa-bars')
     {
         $view = new EditListView($viewName, $viewTitle, self::MODEL_NAMESPACE . $modelName, $viewIcon);
+        $view->settings['card'] = $this->tabsPosition !== 'top';
         $this->addCustomView($viewName, $view);
     }
 
@@ -183,6 +168,7 @@ abstract class PanelController extends BaseController
     protected function addEditView($viewName, $modelName, $viewTitle, $viewIcon = 'fas fa-edit')
     {
         $view = new EditView($viewName, $viewTitle, self::MODEL_NAMESPACE . $modelName, $viewIcon);
+        $view->settings['card'] = $this->tabsPosition !== 'top';
         $this->addCustomView($viewName, $view);
     }
 
@@ -233,9 +219,10 @@ abstract class PanelController extends BaseController
      * @param string $viewTitle
      * @param string $viewIcon
      */
-    protected function addListView($viewName, $modelName, $viewTitle, $viewIcon = 'fas fa-bars')
+    protected function addListView($viewName, $modelName, $viewTitle, $viewIcon = 'fas fa-list')
     {
         $view = new ListView($viewName, $viewTitle, self::MODEL_NAMESPACE . $modelName, $viewIcon);
+        $view->settings['card'] = $this->tabsPosition !== 'top';
         $this->addCustomView($viewName, $view);
     }
 
@@ -247,14 +234,20 @@ abstract class PanelController extends BaseController
     protected function editAction()
     {
         if (!$this->permissions->allowUpdate) {
-            $this->miniLog->alert($this->i18n->trans('not-allowed-modify'));
+            $this->toolBox()->i18nLog()->warning('not-allowed-modify');
+            return false;
+        }
+
+        // duplicated request?
+        if ($this->multiRequestProtection->tokenExist($this->request->request->get('multireqtoken', ''))) {
+            $this->toolBox()->i18nLog()->warning('duplicated-request');
             return false;
         }
 
         // loads model data
         $code = $this->request->request->get('code', '');
         if (!$this->views[$this->active]->model->loadFromCode($code)) {
-            $this->miniLog->error($this->i18n->trans('record-not-found'));
+            $this->toolBox()->i18nLog()->error('record-not-found');
             return false;
         }
 
@@ -263,24 +256,23 @@ abstract class PanelController extends BaseController
 
         // has PK value been changed?
         $this->views[$this->active]->newCode = $this->views[$this->active]->model->primaryColumnValue();
-        if ($code != $this->views[$this->active]->newCode) {
+        if ($code != $this->views[$this->active]->newCode && $this->views[$this->active]->model->test()) {
             $pkColumn = $this->views[$this->active]->model->primaryColumn();
             $this->views[$this->active]->model->{$pkColumn} = $code;
             // change in database
             if (!$this->views[$this->active]->model->changePrimaryColumnValue($this->views[$this->active]->newCode)) {
-                $this->miniLog->error($this->i18n->trans('record-save-error'));
+                $this->toolBox()->i18nLog()->error('record-save-error');
                 return false;
             }
         }
 
         // save in database
         if ($this->views[$this->active]->model->save()) {
-            $this->miniLog->notice($this->i18n->trans('record-updated-correctly'));
-            $this->views[$this->active]->model->clear();
+            $this->toolBox()->i18nLog()->notice('record-updated-correctly');
             return true;
         }
 
-        $this->miniLog->error($this->i18n->trans('record-save-error'));
+        $this->toolBox()->i18nLog()->error('record-save-error');
         return false;
     }
 
@@ -293,12 +285,11 @@ abstract class PanelController extends BaseController
     {
         switch ($action) {
             case 'export':
-                $this->setTemplate(false);
-                $this->exportManager->newDoc($this->request->get('option', ''));
-                foreach ($this->views as $selectedView) {
-                    $selectedView->export($this->exportManager);
-                }
-                $this->exportManager->show($this->response);
+                $this->exportAction();
+                break;
+
+            case 'save-ok':
+                $this->toolBox()->i18nLog()->notice('record-updated-correctly');
                 break;
         }
     }
@@ -325,11 +316,16 @@ abstract class PanelController extends BaseController
                 break;
 
             case 'edit':
-                $this->editAction();
+                if ($this->editAction()) {
+                    $this->views[$this->active]->model->clear();
+                }
                 break;
 
             case 'insert':
-                $this->insertAction();
+                if ($this->insertAction() || !empty($this->views[$this->active]->model->primaryColumnValue())) {
+                    /// wee need to clear model in these scenarios
+                    $this->views[$this->active]->model->clear();
+                }
                 break;
 
             case 'save-document':
@@ -355,33 +351,36 @@ abstract class PanelController extends BaseController
     protected function insertAction()
     {
         if (!$this->permissions->allowUpdate) {
-            $this->miniLog->alert($this->i18n->trans('not-allowed-modify'));
+            $this->toolBox()->i18nLog()->warning('not-allowed-modify');
+            return false;
+        }
+
+        // duplicated request?
+        if ($this->multiRequestProtection->tokenExist($this->request->request->get('multireqtoken', ''))) {
+            $this->toolBox()->i18nLog()->warning('duplicated-request');
             return false;
         }
 
         // loads form data
         $this->views[$this->active]->processFormData($this->request, 'edit');
         if ($this->views[$this->active]->model->exists()) {
-            $this->miniLog->error($this->i18n->trans('duplicate-record'));
+            $this->toolBox()->i18nLog()->error('duplicate-record');
             return false;
-        }
-
-        // empty primary key?
-        if (empty($this->views[$this->active]->model->primaryColumnValue())) {
-            $model = $this->views[$this->active]->model;
-            // assign a new value
-            $this->views[$this->active]->model->{$model->primaryColumn()} = $model->newCode();
         }
 
         // save in database
         if ($this->views[$this->active]->model->save()) {
+            /// redir to new model url only if this is the first view
+            if ($this->active === $this->getMainViewName()) {
+                $this->redirect($this->views[$this->active]->model->url() . '&action=save-ok');
+            }
+
             $this->views[$this->active]->newCode = $this->views[$this->active]->model->primaryColumnValue();
-            $this->views[$this->active]->model->clear();
-            $this->miniLog->notice($this->i18n->trans('record-updated-correctly'));
+            $this->toolBox()->i18nLog()->notice('record-updated-correctly');
             return true;
         }
 
-        $this->miniLog->error($this->i18n->trans('record-save-error'));
+        $this->toolBox()->i18nLog()->error('record-save-error');
         return false;
     }
 

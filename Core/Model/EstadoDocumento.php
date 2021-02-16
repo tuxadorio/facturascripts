@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018  Carlos Garcia Gomez     <carlos@facturascripts.com>
+ * Copyright (C) 2017-2021  Carlos Garcia Gomez     <carlos@facturascripts.com>
  * Copyright (C) 2017       Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,8 +18,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 namespace FacturaScripts\Core\Model;
-
-use FacturaScripts\Core\Base\Utils;
 
 /**
  * A state associated with documents to distinguish them by groups.
@@ -61,6 +59,13 @@ class EstadoDocumento extends Base\ModelClass
     public $generadoc;
 
     /**
+     * Icon of EstadoDocumento.
+     *
+     * @var string
+     */
+    public $icon;
+
+    /**
      * Primary key.
      *
      * @var int
@@ -83,6 +88,7 @@ class EstadoDocumento extends Base\ModelClass
 
     /**
      * Document type: custommer invoice, supplier order, etc...
+     *
      * @var string
      */
     public $tipodoc;
@@ -102,16 +108,31 @@ class EstadoDocumento extends Base\ModelClass
 
     /**
      * 
-     * @return boolean
+     * @return bool
      */
     public function delete()
     {
         if ($this->bloquear) {
-            self::$miniLog->alert(self::$i18n->trans('locked'));
+            $this->toolBox()->i18nLog()->warning('locked');
             return false;
         }
 
         return parent::delete();
+    }
+
+    /**
+     * 
+     * @return string
+     */
+    public function icon(): string
+    {
+        if (!empty($this->icon)) {
+            return $this->icon;
+        } elseif (!empty($this->generadoc)) {
+            return 'fas fa-check';
+        }
+
+        return $this->editable ? 'fas fa-tag' : 'fas fa-lock';
     }
 
     /**
@@ -126,28 +147,26 @@ class EstadoDocumento extends Base\ModelClass
 
     /**
      * 
-     * @return boolean
+     * @return bool
      */
     public function save()
     {
         if ($this->bloquear) {
-            self::$miniLog->alert(self::$i18n->trans('locked'));
+            $this->toolBox()->i18nLog()->warning('locked');
+            return false;
+        } elseif (false === parent::save()) {
             return false;
         }
 
-        if (parent::save()) {
-            if ($this->predeterminado) {
-                $sql = "UPDATE " . static::tableName() . " SET predeterminado = false"
-                    . " WHERE predeterminado = true"
-                    . " AND tipodoc = " . self::$dataBase->var2str($this->tipodoc)
-                    . " AND idestado != " . self::$dataBase->var2str($this->idestado) . ";";
-                return self::$dataBase->exec($sql);
-            }
-
-            return true;
+        if ($this->predeterminado) {
+            $sql = "UPDATE " . static::tableName() . " SET predeterminado = false"
+                . " WHERE predeterminado = true"
+                . " AND tipodoc = " . self::$dataBase->var2str($this->tipodoc)
+                . " AND idestado != " . self::$dataBase->var2str($this->idestado) . ";";
+            return self::$dataBase->exec($sql);
         }
 
-        return false;
+        return true;
     }
 
     /**
@@ -167,12 +186,23 @@ class EstadoDocumento extends Base\ModelClass
      */
     public function test()
     {
-        $this->nombre = Utils::noHtml($this->nombre);
-
-        if (empty($this->tipodoc) || empty($this->nombre)) {
+        $this->nombre = $this->toolBox()->utils()->noHtml($this->nombre);
+        if (empty($this->nombre) || empty($this->tipodoc)) {
             return false;
         }
 
         return parent::test();
+    }
+
+    /**
+     * 
+     * @param string $type
+     * @param string $list
+     *
+     * @return string
+     */
+    public function url(string $type = 'auto', string $list = 'ListSecuenciaDocumento?activetab=List')
+    {
+        return parent::url($type, $list);
     }
 }

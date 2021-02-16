@@ -1,3 +1,4 @@
 codserie;descripcion;siniva
-"A";"SERIE A";false
-"R";"RECTIFICATIVAS";false
+"A";"General";false
+"R";"Rectificativas";false
+"S";"Simplificadas";false

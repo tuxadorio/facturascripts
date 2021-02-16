@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,15 +18,18 @@
  */
 namespace FacturaScripts\Core\Model\Base;
 
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Dinamic\Model\ProductoProveedor;
 use FacturaScripts\Dinamic\Model\Proveedor;
+use FacturaScripts\Dinamic\Model\User;
+use FacturaScripts\Dinamic\Model\Variante;
 
 /**
  * Description of PurchaseDocument
  *
  * @author Carlos García Gómez <carlos@facturascripts.com>
  */
-abstract class PurchaseDocument extends BusinessDocument
+abstract class PurchaseDocument extends TransformerDocument
 {
 
     /**
@@ -51,6 +54,101 @@ abstract class PurchaseDocument extends BusinessDocument
      */
     public $numproveedor;
 
+    public function clear()
+    {
+        parent::clear();
+
+        /// select default currency
+        $coddivisa = $this->toolBox()->appSettings()->get('default', 'coddivisa');
+        $this->setCurrency($coddivisa, true);
+    }
+
+    /**
+     * Returns a new document line with the data of the product. Finds product
+     * by reference or barcode.
+     *
+     * @param string $reference
+     *
+     * @return PurchaseDocumentLine
+     */
+    public function getNewProductLine($reference)
+    {
+        $newLine = $this->getNewLine();
+        if (empty($reference)) {
+            return $newLine;
+        }
+
+        $variant = new Variante();
+        $where1 = [new DataBaseWhere('referencia', $this->toolBox()->utils()->noHtml($reference))];
+        $where2 = [new DataBaseWhere('codbarras', $this->toolBox()->utils()->noHtml($reference))];
+        if ($variant->loadFromCode('', $where1) || $variant->loadFromCode('', $where2)) {
+            $product = $variant->getProducto();
+
+            $newLine->codimpuesto = $product->getTax()->codimpuesto;
+            $newLine->descripcion = $variant->description();
+            $newLine->idproducto = $product->idproducto;
+            $newLine->iva = $product->getTax()->iva;
+            $newLine->pvpunitario = $variant->coste;
+            $newLine->recargo = $product->getTax()->recargo;
+            $newLine->referencia = $variant->referencia;
+
+            $this->setLastSupplierPrice($newLine);
+
+            /// allow extensions
+            $this->pipe('getNewProductLine', $newLine, $variant, $product);
+        }
+
+        return $newLine;
+    }
+
+    /**
+     * 
+     * @return Proveedor
+     */
+    public function getSubject()
+    {
+        $proveedor = new Proveedor();
+        $proveedor->loadFromCode($this->codproveedor);
+        return $proveedor;
+    }
+
+    /**
+     * 
+     * @return string
+     */
+    public function install()
+    {
+        /// we need to call parent first
+        $result = parent::install();
+
+        /// needed dependencies
+        new Proveedor();
+
+        return $result;
+    }
+
+    /**
+     * Sets the author for this document.
+     * 
+     * @param User $author
+     *
+     * @return bool
+     */
+    public function setAuthor($author)
+    {
+        if (!isset($author->nick)) {
+            return false;
+        }
+
+        $this->codalmacen = $author->codalmacen ?? $this->codalmacen;
+        $this->idempresa = $author->idempresa ?? $this->idempresa;
+        $this->nick = $author->nick;
+
+        /// allow extensions
+        $this->pipe('setAuthor', $author);
+        return true;
+    }
+
     /**
      * Assign the supplier to the document.
      * 
@@ -67,14 +165,25 @@ abstract class PurchaseDocument extends BusinessDocument
         /// supplier model
         $this->codproveedor = $subject->codproveedor;
         $this->nombre = $subject->razonsocial;
-        $this->cifnif = $subject->cifnif;
+        $this->cifnif = $subject->cifnif ?? '';
 
         /// commercial data
         $this->codpago = $subject->codpago ?? $this->codpago;
         $this->codserie = $subject->codserie ?? $this->codserie;
-        $this->irpf = $subject->irpf ?? $this->irpf;
+        $this->irpf = $subject->irpf() ?? $this->irpf;
 
+        /// allow extensions
+        $this->pipe('setSubject', $subject);
         return true;
+    }
+
+    /**
+     * 
+     * @return string
+     */
+    public function subjectColumn()
+    {
+        return 'codproveedor';
     }
 
     /**
@@ -84,8 +193,9 @@ abstract class PurchaseDocument extends BusinessDocument
      */
     public function test()
     {
-        $this->nombre = Utils::noHtml($this->nombre);
-        $this->numproveedor = Utils::noHtml($this->numproveedor);
+        $utils = $this->toolBox()->utils();
+        $this->nombre = $utils->noHtml($this->nombre);
+        $this->numproveedor = $utils->noHtml($this->numproveedor);
 
         return parent::test();
     }
@@ -97,16 +207,27 @@ abstract class PurchaseDocument extends BusinessDocument
      */
     public function updateSubject()
     {
-        if (empty($this->codproveedor)) {
-            return false;
-        }
-
         $proveedor = new Proveedor();
-        if (!$proveedor->loadFromCode($this->codproveedor)) {
-            return false;
-        }
+        return $this->codproveedor && $proveedor->loadFromCode($this->codproveedor) ? $this->setSubject($proveedor) : false;
+    }
 
-        return $this->setSubject($proveedor);
+    /**
+     * Sets the last price and discounts from this supplier.
+     * 
+     * @param BusinessDocumentLine $newLine
+     */
+    protected function setLastSupplierPrice(&$newLine)
+    {
+        $supplierProd = new ProductoProveedor();
+        $where = [
+            new DataBaseWhere('codproveedor', $this->codproveedor),
+            new DataBaseWhere('referencia', $newLine->referencia)
+        ];
+        if ($supplierProd->loadFromCode('', $where) && $supplierProd->precio > 0) {
+            $newLine->dtopor = $supplierProd->dtopor;
+            $newLine->dtopor2 = $supplierProd->dtopor2;
+            $newLine->pvpunitario = $supplierProd->precio;
+        }
     }
 
     /**
@@ -115,11 +236,7 @@ abstract class PurchaseDocument extends BusinessDocument
      */
     protected function setPreviousData(array $fields = [])
     {
-        $more = [
-            'codalmacen', 'coddivisa', 'codejercicio', 'codpago', 'codproveedor',
-            'codserie', 'editable', 'fecha', 'hora', 'idempresa', 'idestado',
-            'total'
-        ];
-        parent::setPreviousData(array_merge($more, $fields));
+        $more = ['codproveedor'];
+        parent::setPreviousData(\array_merge($more, $fields));
     }
 }

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,7 @@
  */
 namespace FacturaScripts\Core\Model\Base;
 
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Dinamic\Lib\FiscalNumberValitator;
 
 /**
  * Description of Contact
@@ -93,13 +93,22 @@ abstract class Contact extends ModelClass
     public $telefono2;
 
     /**
+     * Type of tax identification of the client.
+     * Examples: CIF, NIF, CUIT ...
+     *
+     * @var string
+     */
+    public $tipoidfiscal;
+
+    /**
      * Reset the values of all model properties.
      */
     public function clear()
     {
         parent::clear();
-        $this->fechaalta = date('d-m-Y');
+        $this->fechaalta = \date(self::DATE_STYLE);
         $this->personafisica = true;
+        $this->tipoidfiscal = $this->toolBox()->appSettings()->get('default', 'tipoidfiscal');
     }
 
     /**
@@ -111,7 +120,7 @@ abstract class Contact extends ModelClass
      */
     public function gravatar($size = 80)
     {
-        return 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($this->email))) . '?s=' . $size;
+        return 'https://www.gravatar.com/avatar/' . \md5(\strtolower(trim($this->email))) . '?s=' . $size;
     }
 
     /**
@@ -121,21 +130,29 @@ abstract class Contact extends ModelClass
      */
     public function test()
     {
-        $this->cifnif = Utils::noHtml($this->cifnif);
-        $this->email = Utils::noHtml(mb_strtolower($this->email, 'UTF8'));
-        $this->fax = Utils::noHtml($this->fax);
-        $this->nombre = Utils::noHtml($this->nombre);
-        $this->observaciones = Utils::noHtml($this->observaciones);
-        $this->telefono1 = Utils::noHtml($this->telefono1);
-        $this->telefono2 = Utils::noHtml($this->telefono2);
+        $utils = $this->toolBox()->utils();
+        $this->cifnif = $utils->noHtml($this->cifnif);
+        $this->email = $utils->noHtml(mb_strtolower($this->email, 'UTF8'));
+        $this->fax = $utils->noHtml($this->fax);
+        $this->nombre = $utils->noHtml($this->nombre);
+        $this->observaciones = $utils->noHtml($this->observaciones);
+        $this->telefono1 = $utils->noHtml($this->telefono1);
+        $this->telefono2 = $utils->noHtml($this->telefono2);
 
         if (empty($this->nombre)) {
-            self::$miniLog->alert(self::$i18n->trans('field-can-not-be-null', ['%fieldName%' => 'nombre', '%tableName%' => static::tableName()]));
+            $this->toolBox()->i18nLog()->warning('field-can-not-be-null', ['%fieldName%' => 'nombre', '%tableName%' => static::tableName()]);
             return false;
         }
 
-        if (!empty($this->email) && !filter_var($this->email, FILTER_VALIDATE_EMAIL)) {
-            self::$miniLog->alert(self::$i18n->trans('not-valid-email', ['%email%' => $this->email]));
+        $validator = new FiscalNumberValitator();
+        if (!empty($this->cifnif) && false === $validator->validate($this->tipoidfiscal, $this->cifnif)) {
+            $this->toolBox()->i18nLog()->warning('not-valid-fiscal-number', ['%type%' => $this->tipoidfiscal, '%number%' => $this->cifnif]);
+            return false;
+        }
+
+        if (!empty($this->email) && false === \filter_var($this->email, \FILTER_VALIDATE_EMAIL)) {
+            $this->toolBox()->i18nLog()->warning('not-valid-email', ['%email%' => $this->email]);
+            $this->email = null;
             return false;
         }
 

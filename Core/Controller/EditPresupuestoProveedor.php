@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,16 +18,26 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController\PurchaseDocumentController;
+use FacturaScripts\Dinamic\Lib\ExtendedController\PurchaseDocumentController;
 
 /**
  * Controller to edit a single item from the PresupuestoProveedor model
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Luis Miguel Pérez <luismi@pcrednet.com>
+ * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Luis Miguel Pérez    <luismi@pcrednet.com>
  */
 class EditPresupuestoProveedor extends PurchaseDocumentController
 {
+
+    /**
+     * Return the document class name.
+     *
+     * @return string
+     */
+    public function getModelClassName()
+    {
+        return 'PresupuestoProveedor';
+    }
 
     /**
      * Returns basic page attributes
@@ -36,22 +46,10 @@ class EditPresupuestoProveedor extends PurchaseDocumentController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'estimation';
-        $pagedata['menu'] = 'purchases';
-        $pagedata['icon'] = 'fas fa-copy';
-        $pagedata['showonmenu'] = false;
-
-        return $pagedata;
-    }
-
-    /**
-     * Return the document class name.
-     *
-     * @return string
-     */
-    protected function getModelClassName()
-    {
-        return 'PresupuestoProveedor';
+        $data = parent::getPageData();
+        $data['menu'] = 'purchases';
+        $data['title'] = 'estimation';
+        $data['icon'] = 'fas fa-file-invoice';
+        return $data;
     }
 }

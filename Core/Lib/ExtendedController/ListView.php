@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,12 +19,11 @@
 namespace FacturaScripts\Core\Lib\ExtendedController;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Base\Utils;
-use FacturaScripts\Core\Lib\AssetManager;
-use FacturaScripts\Core\Lib\ExportManager;
-use FacturaScripts\Core\Lib\ListFilter\BaseFilter;
-use FacturaScripts\Core\Model\PageFilter;
-use FacturaScripts\Core\Model\User;
+use FacturaScripts\Dinamic\Lib\AssetManager;
+use FacturaScripts\Dinamic\Lib\ExportManager;
+use FacturaScripts\Dinamic\Lib\Widget\ColumnItem;
+use FacturaScripts\Dinamic\Model\TotalModel;
+use FacturaScripts\Dinamic\Model\User;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -36,12 +35,9 @@ use Symfony\Component\HttpFoundation\Request;
 class ListView extends BaseView
 {
 
-    /**
-     * Filter configuration preset by the user
-     *
-     * @var BaseFilter[]
-     */
-    public $filters = [];
+    use ListViewFiltersTrait;
+
+    const DEFAULT_TEMPLATE = 'Master/ListView.html.twig';
 
     /**
      *
@@ -55,20 +51,6 @@ class ListView extends BaseView
      * @var array
      */
     public $orderOptions = [];
-
-    /**
-     * Predefined filter values selected
-     *
-     * @var int
-     */
-    public $pageFilterKey = 0;
-
-    /**
-     * List of predefined filter values
-     *
-     * @var PageFilter[]
-     */
-    public $pageFilters = [];
 
     /**
      *
@@ -85,23 +67,9 @@ class ListView extends BaseView
 
     /**
      *
-     * @var bool
+     * @var array
      */
-    public $showFilters = false;
-
-    /**
-     * ListView constructor and initialization.
-     *
-     * @param string $name
-     * @param string $title
-     * @param string $modelName
-     * @param string $icon
-     */
-    public function __construct($name, $title, $modelName, $icon)
-    {
-        parent::__construct($name, $title, $modelName, $icon);
-        $this->template = 'Master/ListView.html.twig';
-    }
+    public $totalAmounts = [];
 
     /**
      * Adds a field to the Order By list
@@ -112,33 +80,37 @@ class ListView extends BaseView
      */
     public function addOrderBy(array $fields, $label, $default = 0)
     {
-        $key1 = strtolower(implode('|', $fields)) . '_asc';
+        $key1 = \strtolower(\implode('|', $fields)) . '_asc';
         $this->orderOptions[$key1] = [
             'fields' => $fields,
-            'label' => static::$i18n->trans($label),
-            'type' => 'ASC',
+            'label' => $this->toolBox()->i18n()->trans($label),
+            'type' => 'ASC'
         ];
 
-        $key2 = strtolower(implode('|', $fields)) . '_desc';
+        $key2 = \strtolower(\implode('|', $fields)) . '_desc';
         $this->orderOptions[$key2] = [
             'fields' => $fields,
-            'label' => static::$i18n->trans($label),
-            'type' => 'DESC',
+            'label' => $this->toolBox()->i18n()->trans($label),
+            'type' => 'DESC'
         ];
 
-        switch ($default) {
-            case 1:
-                $this->setSelectedOrderBy($key1);
-                break;
+        if ($default === 2) {
+            $this->setSelectedOrderBy($key2);
+        } elseif ($default === 1 || empty($this->order)) {
+            $this->setSelectedOrderBy($key1);
+        }
+    }
 
-            case 2:
-                $this->setSelectedOrderBy($key2);
-                break;
-
-            default:
-                if (empty($this->order)) {
-                    $this->setSelectedOrderBy($key1);
-                }
+    /**
+     * Adds a list of fields to the search in the ListView.
+     * To use integer columns, use CAST(columnName AS CHAR(50)).
+     *
+     * @param array $fields
+     */
+    public function addSearchFields(array $fields)
+    {
+        foreach ($fields as $field) {
+            $this->searchFields[] = $field;
         }
     }
 
@@ -148,7 +120,7 @@ class ListView extends BaseView
      */
     public function btnNewUrl()
     {
-        $url = $this->model->url('new');
+        $url = empty($this->model) ? '' : $this->model->url('new');
         $params = [];
         foreach (DataBaseWhere::getFieldsFilter($this->where) as $key => $value) {
             if ($value !== false) {
@@ -156,82 +128,66 @@ class ListView extends BaseView
             }
         }
 
-        return empty($params) ? $url : $url . '?' . implode('&', $params);
-    }
-
-    /**
-     * Removes a saved user filter.
-     *
-     * @param string $idfilter
-     *
-     * @return boolean
-     */
-    public function deletePageFilter($idfilter)
-    {
-        $pageFilter = new PageFilter();
-        if ($pageFilter->loadFromCode($idfilter) && $pageFilter->delete()) {
-            /// remove form the list
-            foreach ($this->pageFilters as $key => $pfil) {
-                if ($pfil->id == $idfilter) {
-                    unset($this->pageFilters[$key]);
-                }
-            }
-            return true;
-        }
-
-        return false;
+        return empty($params) ? $url : $url . '?' . \implode('&', $params);
     }
 
     /**
      * Method to export the view data.
      *
      * @param ExportManager $exportManager
+     *
+     * @return bool
      */
-    public function export(&$exportManager)
+    public function export(&$exportManager): bool
     {
         if ($this->count > 0) {
-            $exportManager->generateListModelPage(
-                $this->model, $this->where, $this->order, $this->offset, $this->getColumns(), $this->title
+            return $exportManager->addListModelPage(
+                    $this->model, $this->where, $this->order, $this->offset, $this->getColumns(), $this->title
             );
         }
+
+        return true;
     }
 
     /**
      *
-     * @return array
+     * @return ColumnItem[]
      */
     public function getColumns()
     {
-        $columns = [];
         foreach ($this->columns as $group) {
-            foreach ($group->columns as $col) {
-                $columns[] = $col;
-            }
+            return $group->columns;
         }
 
-        return $columns;
+        return [];
     }
 
     /**
      * Loads the data in the cursor property, according to the where filter specified.
      *
-     * @param mixed           $code
+     * @param string          $code
      * @param DataBaseWhere[] $where
      * @param array           $order
      * @param int             $offset
      * @param int             $limit
      */
-    public function loadData($code = false, $where = [], $order = [], $offset = -1, $limit = FS_ITEM_LIMIT)
+    public function loadData($code = '', $where = [], $order = [], $offset = -1, $limit = \FS_ITEM_LIMIT)
     {
-        $this->offset = ($offset < 0) ? $this->offset : $offset;
+        $this->offset = $offset < 0 ? $this->offset : $offset;
         $this->order = empty($order) ? $this->order : $order;
-        $this->where = array_merge($where, $this->where);
-        $this->count = is_null($this->model) ? 0 : $this->model->count($this->where);
+        $this->where = \array_merge($where, $this->where);
+        $this->count = \is_null($this->model) ? 0 : $this->model->count($this->where);
+
+        /// avoid overflow
+        if ($this->offset > $this->count) {
+            $this->offset = 0;
+        }
 
         /// needed when megasearch force data reload
         $this->cursor = [];
         if ($this->count > 0) {
             $this->cursor = $this->model->all($this->where, $this->order, $this->offset, $limit);
+            $this->loadTotalAmounts();
         }
     }
 
@@ -244,10 +200,8 @@ class ListView extends BaseView
         parent::loadPageOptions($user);
 
         // load saved filters
-        $orderby = ['nick' => 'ASC', 'description' => 'ASC'];
         $where = $this->getPageWhere($user);
-        $pageFilter = new PageFilter();
-        $this->pageFilters = $pageFilter->all($where, $orderby);
+        $this->loadSavedFilters($where);
     }
 
     /**
@@ -271,14 +225,49 @@ class ListView extends BaseView
                 break;
 
             case 'load':
+                $this->sortFilters();
                 $this->processFormDataLoad($request);
                 break;
 
             case 'preload':
+                $this->sortFilters();
                 foreach ($this->filters as $filter) {
                     $filter->getDataBaseWhere($this->where);
                 }
                 break;
+        }
+    }
+
+    /**
+     * Adds assets to the asset manager.
+     */
+    protected function assets()
+    {
+        AssetManager::add('js', \FS_ROUTE . '/Dinamic/Assets/JS/ListView.js');
+    }
+
+    private function loadTotalAmounts()
+    {
+        $tableName = \count($this->cursor) > 1 && \method_exists($this->model, 'tableName') ? $this->model->tableName() : '';
+        if (empty($tableName)) {
+            return;
+        }
+
+        foreach ($this->getColumns() as $col) {
+            if ($col->hidden() || false === $col->widget->showTableTotals()) {
+                continue;
+            }
+
+            $pageTotalAmount = 0;
+            foreach ($this->cursor as $model) {
+                $pageTotalAmount += $model->{$col->widget->fieldname};
+            }
+
+            $this->totalAmounts[$col->widget->fieldname] = [
+                'title' => $col->title,
+                'page' => $pageTotalAmount,
+                'total' => TotalModel::sum($tableName, $col->widget->fieldname, $this->where)
+            ];
         }
     }
 
@@ -294,8 +283,8 @@ class ListView extends BaseView
         /// query
         $this->query = $request->request->get('query', '');
         if ('' !== $this->query) {
-            $fields = implode('|', $this->searchFields);
-            $this->where[] = new DataBaseWhere($fields, Utils::noHtml($this->query), 'LIKE');
+            $fields = \implode('|', $this->searchFields);
+            $this->where[] = new DataBaseWhere($fields, $this->toolBox()->utils()->noHtml($this->query), 'XLIKE');
         }
 
         /// select saved filter
@@ -320,71 +309,20 @@ class ListView extends BaseView
     }
 
     /**
-     * Save filter values for user/s.
-     *
-     * @param Request $request
-     * @param User    $user
-     *
-     * @return int
-     */
-    public function savePageFilter($request, $user)
-    {
-        $pageFilter = new PageFilter();
-
-        // Set values data filter
-        foreach ($this->filters as $filter) {
-            $name = $filter->name();
-            $value = $request->request->get($name, null);
-            if (!empty($value)) {
-                $pageFilter->filters[$name] = $value;
-            }
-        }
-
-        // If filters values its empty, don't save filter
-        if (empty($pageFilter->filters)) {
-            return 0;
-        }
-
-        // Set basic data and save filter
-        $pageFilter->id = $request->request->get('filter-id', null);
-        $pageFilter->description = $request->request->get('filter-description', '');
-        $pageFilter->name = explode('-', $this->getViewName())[0];
-        $pageFilter->nick = $user->nick;
-
-        // Save and return it's all ok
-        if ($pageFilter->save()) {
-            $this->pageFilters[] = $pageFilter;
-            return $pageFilter->id;
-        }
-
-        return 0;
-    }
-
-    /**
-     * Adds assets to the asset manager.
-     */
-    protected function assets()
-    {
-        AssetManager::add('js', FS_ROUTE . '/Dinamic/Assets/JS/ListView.js');
-    }
-
-    /**
      * Checks and establishes the selected value in the Order By
      *
      * @param string $orderKey
      */
     protected function setSelectedOrderBy($orderKey)
     {
-        if (!isset($this->orderOptions[$orderKey])) {
-            return;
-        }
+        if (isset($this->orderOptions[$orderKey])) {
+            $this->order = [];
+            $option = $this->orderOptions[$orderKey];
+            foreach ($option['fields'] as $field) {
+                $this->order[$field] = $option['type'];
+            }
 
-        $this->order = [];
-        $option = $this->orderOptions[$orderKey];
-        foreach ($option['fields'] as $field) {
-            $this->order[$field] = $option['type'];
+            $this->orderKey = $orderKey;
         }
-
-        $this->orderKey = $orderKey;
     }
 }

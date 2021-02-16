@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -34,17 +34,16 @@
                 <values title="supplier-order">PedidoProveedor</values>
                 <values title="supplier-delivery-note">AlbaranProveedor</values>
                 <values title="supplier-invoice">FacturaProveedor</values>
-                <values title="service">Servicio</values>
             </widget>
         </column>
         <column name="name" order="120">
             <widget type="text" fieldname="nombre" />
         </column>
         <column name="default" display="center" order="130">
-            <widget type="checkbox" fieldname="predeterminado"></widget>
+            <widget type="checkbox" fieldname="predeterminado" />
         </column>
         <column name="editable" display="center" order="140">
-            <widget type="checkbox" fieldname="editable"></widget>
+            <widget type="checkbox" fieldname="editable" />
         </column>
         <column name="update-stock" display="center" order="150">
             <widget type="select" fieldname="actualizastock" translate="true">
@@ -53,6 +52,10 @@
                 <values title="do-nothing">0</values>
                 <values title="add">1</values>
                 <values title="foresee">2</values>
+                <option color="warning">-2</option>
+                <option color="danger">-1</option>
+                <option color="success">1</option>
+                <option color="warning">2</option>
             </widget>
         </column>
         <column name="generate-doc-type" display="right" order="160">
@@ -69,11 +72,10 @@
         </column>
     </columns>
     <rows>
-        <row type="status" fieldname="actualizastock">
-            <option color="warning">-2</option>
-            <option color="danger">-1</option>
-            <option color="success">1</option>
-            <option color="warning">2</option>
+        <row type="status">
+            <option color="info" fieldname="predeterminado">1</option>
+            <option color="success" fieldname="generadoc">neq:</option>
+            <option color="warning" fieldname="editable">0</option>
         </row>
     </rows>
 </view>

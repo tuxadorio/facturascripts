@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2014-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2014-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,12 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\App\AppSettings;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Dinamic\Lib\Accounting\AccountingAccounts;
+use FacturaScripts\Dinamic\Model\Asiento as DinAsiento;
+use FacturaScripts\Dinamic\Model\Ejercicio as DinEjercicio;
+use FacturaScripts\Dinamic\Model\Partida as DinPartida;
+use FacturaScripts\Dinamic\Model\Subcuenta as DinSubcuenta;
 
 /**
  * A VAT regularization.
@@ -30,27 +35,28 @@ class RegularizacionImpuesto extends Base\ModelClass
 {
 
     use Base\ModelTrait;
+    use Base\AccEntryRelationTrait;
+    use Base\ExerciseRelationTrait;
 
     /**
-     * Exercise code.
      *
-     * @var string
+     * @var bool
      */
-    public $codejercicio;
-
-    /**
-     * Code, not ID, of the related sub-account.
-     *
-     * @var string
-     */
-    public $codsubcuentaacreedora;
+    public $bloquear;
 
     /**
      * Code, not ID, of the related sub-account.
      *
      * @var string
      */
-    public $codsubcuentadeudora;
+    public $codsubcuentaacr;
+
+    /**
+     * Code, not ID, of the related sub-account.
+     *
+     * @var string
+     */
+    public $codsubcuentadeu;
 
     /**
      * Date of entry.
@@ -74,13 +80,6 @@ class RegularizacionImpuesto extends Base\ModelClass
     public $fechainicio;
 
     /**
-     * ID of the generated accounting entry.
-     *
-     * @var int
-     */
-    public $idasiento;
-
-    /**
      * Foreign Key with Empresas table.
      *
      * @var int
@@ -92,21 +91,21 @@ class RegularizacionImpuesto extends Base\ModelClass
      *
      * @var int
      */
-    public $idregularizacion;
+    public $idregiva;
 
     /**
      * Related sub-account ID.
      *
      * @var int
      */
-    public $idsubcuentaacreedora;
+    public $idsubcuentaacr;
 
     /**
      * Related sub-account ID.
      *
      * @var int
      */
-    public $idsubcuentadeudora;
+    public $idsubcuentadeu;
 
     /**
      * Period of regularization.
@@ -118,7 +117,7 @@ class RegularizacionImpuesto extends Base\ModelClass
     public function clear()
     {
         parent::clear();
-        $this->idempresa = AppSettings::get('default', 'idempresa');
+        $this->bloquear = false;
     }
 
     /**
@@ -128,45 +127,13 @@ class RegularizacionImpuesto extends Base\ModelClass
      */
     public function delete()
     {
-        $asiento = $this->getAsiento();
-        if ($asiento->exists()) {
-            $asiento->delete();
-        }
+        if (parent::delete()) {
+            $accEntry = $this->getAccountingEntry();
+            if ($accEntry->exists()) {
+                $accEntry->delete();
+            }
 
-        return parent::delete();
-    }
-
-    /**
-     * 
-     * @return Asiento
-     */
-    public function getAsiento()
-    {
-        $asiento = new Asiento();
-        $asiento->loadFromCode($this->idasiento);
-        return $asiento;
-    }
-
-    /**
-     * Returns the VAT regularization corresponding to that date,
-     * that is, the regularization whose start date is earlier
-     * to the date provided and its end date is after the date
-     * provided. So you can know if the period is still open to be able
-     * check in.
-     *
-     * @param string $fecha
-     *
-     * @return bool|RegularizacionImpuesto
-     */
-    public function getFechaInside($fecha)
-    {
-        $sql = 'SELECT * FROM ' . static::tableName()
-            . ' WHERE fechainicio <= ' . self::$dataBase->var2str($fecha)
-            . ' AND fechafin >= ' . self::$dataBase->var2str($fecha) . ';';
-
-        $data = self::$dataBase->select($sql);
-        if (!empty($data)) {
-            return new self($data[0]);
+            return true;
         }
 
         return false;
@@ -175,12 +142,11 @@ class RegularizacionImpuesto extends Base\ModelClass
     /**
      * Returns the items per accounting entry.
      *
-     * @return Partida[]
+     * @return DinPartida[]
      */
     public function getPartidas()
     {
-        $asiento = $this->getAsiento();
-        return $asiento->getLines();
+        return $this->getAccountingEntry()->getLines();
     }
 
     /**
@@ -193,10 +159,26 @@ class RegularizacionImpuesto extends Base\ModelClass
     public function install()
     {
         /// needed dependencies
-        new Ejercicio();
-        new Asiento();
+        new DinEjercicio();
+        new DinSubcuenta();
+        new DinAsiento();
 
         return parent::install();
+    }
+
+    /**
+     * 
+     * @param string $fecha
+     *
+     * @return bool
+     */
+    public function loadFechaInside($fecha): bool
+    {
+        $where = [
+            new DataBaseWhere('fechainicio', $fecha, '<='),
+            new DataBaseWhere('fechafin', $fecha, '>=')
+        ];
+        return $this->loadFromCode('', $where);
     }
 
     /**
@@ -206,7 +188,7 @@ class RegularizacionImpuesto extends Base\ModelClass
      */
     public static function primaryColumn()
     {
-        return 'idregularizacion';
+        return 'idregiva';
     }
 
     /**
@@ -227,5 +209,71 @@ class RegularizacionImpuesto extends Base\ModelClass
     public static function tableName()
     {
         return 'regularizacionimpuestos';
+    }
+
+    /**
+     * Returns true if there are no errors in the values of the model properties.
+     * It runs inside the save method.
+     *
+     * @return bool
+     */
+    public function test()
+    {
+        /// calculate dates to selected period
+        $period = $this->getPeriod($this->periodo);
+        $this->fechainicio = $period['start'];
+        $this->fechafin = $period['end'];
+
+        if (empty($this->idempresa)) {
+            $this->idempresa = $this->getExercise()->idempresa;
+        }
+
+        if (empty($this->codsubcuentaacr) || empty($this->codsubcuentadeu)) {
+            $this->setDefaultAccounts();
+        }
+
+        return parent::test();
+    }
+
+    /**
+     * Calculate Period data
+     *
+     * @param string $period
+     *
+     * @return array
+     */
+    private function getPeriod($period): array
+    {
+        /// Calculate year
+        $year = \date('Y', \strtotime($this->getExercise()->fechainicio));
+
+        // return periods values
+        switch ($period) {
+            case 'T2':
+                return ['start' => \date('01-04-' . $year), 'end' => \date('30-06-' . $year)];
+
+            case 'T3':
+                return ['start' => \date('01-07-' . $year), 'end' => \date('30-09-' . $year)];
+
+            case 'T4':
+                return ['start' => \date('01-10-' . $year), 'end' => \date('31-12-' . $year)];
+
+            default:
+                return ['start' => \date('01-01-' . $year), 'end' => \date('31-03-' . $year)];
+        }
+    }
+
+    protected function setDefaultAccounts()
+    {
+        $accounts = new AccountingAccounts();
+        $accounts->exercise = $this->getExercise();
+
+        $subcuentaacr = $accounts->getSpecialSubAccount('IVAACR');
+        $this->codsubcuentaacr = $subcuentaacr->codsubcuenta;
+        $this->idsubcuentaacr = $subcuentaacr->primaryColumnValue();
+
+        $subcuentadeu = $accounts->getSpecialSubAccount('IVADEU');
+        $this->codsubcuentadeu = $subcuentadeu->codsubcuenta;
+        $this->idsubcuentadeu = $subcuentadeu->primaryColumnValue();
     }
 }

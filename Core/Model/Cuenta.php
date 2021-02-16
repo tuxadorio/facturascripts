@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2014-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2014-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,12 +19,12 @@
 namespace FacturaScripts\Core\Model;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Dinamic\Model\CuentaEspecial as DinCuentaEspecial;
+use FacturaScripts\Dinamic\Model\Ejercicio as DinEjercicio;
+use FacturaScripts\Dinamic\Model\Subcuenta as DinSubcuenta;
 
 /**
- * Element of the third level of the accounting plan.
- * It is related to a single fiscal year and epigraph,
- * but it can be related to many subaccounts.
+ * First level of the accounting plan.
  *
  * @author Carlos García Gómez  <carlos@facturascripts.com>
  * @author Artex Trading sa     <jcuello@artextrading.com>
@@ -33,6 +33,7 @@ class Cuenta extends Base\ModelClass
 {
 
     use Base\ModelTrait;
+    use Base\ExerciseRelationTrait;
 
     /**
      * Account code.
@@ -49,13 +50,6 @@ class Cuenta extends Base\ModelClass
     public $codcuentaesp;
 
     /**
-     * Code of the exercise of this account.
-     *
-     * @var string
-     */
-    public $codejercicio;
-
-    /**
      * Description of the account.
      *
      * @var string
@@ -66,7 +60,7 @@ class Cuenta extends Base\ModelClass
      *
      * @var bool
      */
-    private static $disableAditionTest = false;
+    private $disableAditionalTest = false;
 
     /**
      * Primary key.
@@ -83,15 +77,46 @@ class Cuenta extends Base\ModelClass
     public $parent_codcuenta;
 
     /**
-     * Identifier of the parent account
+     * Parent account identifier
      *
      * @var integer
      */
     public $parent_idcuenta;
 
+    public function clear()
+    {
+        parent::clear();
+        $this->codejercicio = $this->getExercise()->codejercicio;
+    }
+
+    /**
+     * Removes this account from the database.
+     * 
+     * @return bool
+     */
+    public function delete()
+    {
+        if ($this->getExercise()->isOpened() || $this->disableAditionalTest) {
+            return parent::delete();
+        }
+
+        $this->toolBox()->i18nLog()->warning('closed-exercise', ['%exerciseName%' => $this->getExercise()->nombre]);
+        return false;
+    }
+
     /**
      * 
-     * @return Cuenta[]
+     * @param bool $value
+     */
+    public function disableAditionalTest(bool $value)
+    {
+        $this->disableAditionalTest = $value;
+    }
+
+    /**
+     * Returns all children accounts for this account.
+     *
+     * @return static[]
      */
     public function getChildren()
     {
@@ -100,30 +125,42 @@ class Cuenta extends Base\ModelClass
     }
 
     /**
-     * 
-     * @return Cuenta
+     * Retuns parent account.
+     *
+     * @return static
      */
     public function getParent()
     {
-        $parent = new Cuenta();
-        $parent->loadFromCode($this->parent_idcuenta);
+        $parent = new static();
+
+        /// no parent data?
+        if (empty($this->parent_idcuenta) && empty($this->parent_codcuenta)) {
+            return $parent;
+        }
+
+        /// parent id?
+        if (!empty($this->parent_idcuenta) && $parent->loadFromCode($this->parent_idcuenta) && $parent->codejercicio === $this->codejercicio) {
+            return $parent;
+        }
+
+        $where = [
+            new DataBaseWhere('codejercicio', $this->codejercicio),
+            new DataBaseWhere('codcuenta', $this->parent_codcuenta)
+        ];
+        $parent->loadFromCode('', $where);
         return $parent;
     }
 
     /**
-     * 
-     * @return Subcuenta[]
+     * Returns all subaccounts from this account.
+     *
+     * @return DinSubcuenta[]
      */
     public function getSubcuentas()
     {
-        $subcuenta = new Subcuenta();
+        $subcuenta = new DinSubcuenta();
         $where = [new DataBaseWhere('idcuenta', $this->idcuenta)];
         return $subcuenta->all($where, ['codsubcuenta' => 'ASC'], 0, 0);
-    }
-
-    public function disableAditionalTest()
-    {
-        self::$disableAditionTest = true;
     }
 
     /**
@@ -136,8 +173,8 @@ class Cuenta extends Base\ModelClass
     public function install()
     {
         /// force the parents tables
-        new CuentaEspecial();
-        new Ejercicio();
+        new DinCuentaEspecial();
+        new DinEjercicio();
 
         return parent::install();
     }
@@ -150,6 +187,29 @@ class Cuenta extends Base\ModelClass
     public static function primaryColumn()
     {
         return 'idcuenta';
+    }
+
+    /**
+     *
+     * @return string
+     */
+    public function primaryDescriptionColumn()
+    {
+        return 'codcuenta';
+    }
+
+    /**
+     * 
+     * @return bool
+     */
+    public function save()
+    {
+        if ($this->getExercise()->isOpened() || $this->disableAditionalTest) {
+            return parent::save();
+        }
+
+        $this->toolBox()->i18nLog()->warning('closed-exercise', ['%exerciseName%' => $this->getExercise()->nombre]);
+        return false;
     }
 
     /**
@@ -169,24 +229,27 @@ class Cuenta extends Base\ModelClass
      */
     public function test()
     {
-        $this->codcuenta = trim($this->codcuenta);
-        $this->descripcion = Utils::noHtml($this->descripcion);
-        if (strlen($this->descripcion) < 1 || strlen($this->descripcion) > 255) {
-            self::$miniLog->alert(self::$i18n->trans('invalid-column-lenght', ['%column%' => 'descripcion', '%min%' => '1', '%max%' => '255']));
+        $this->codcuenta = \trim($this->codcuenta);
+        $this->descripcion = $this->toolBox()->utils()->noHtml($this->descripcion);
+        if (\strlen($this->descripcion) < 1 || \strlen($this->descripcion) > 255) {
+            $this->toolBox()->i18nLog()->warning('invalid-column-lenght', ['%column%' => 'descripcion', '%min%' => '1', '%max%' => '255']);
             return false;
         }
 
-        /// uncomplete parent account data?
-        if (empty($this->parent_codcuenta) && !empty($this->parent_idcuenta)) {
-            $this->completeParentData();
+        /// prevent loops
+        if (!empty($this->parent_idcuenta) && $this->parent_idcuenta === $this->idcuenta) {
+            $this->parent_idcuenta = null;
         }
 
-        if (!empty($this->parent_idcuenta) && !self::$disableAditionTest) {
+        if (!empty($this->parent_codcuenta) && $this->parent_codcuenta === $this->codcuenta) {
+            $this->parent_codcuenta = null;
+        }
+
+        /// uncomplete parent account data?
+        if (!empty($this->parent_idcuenta) || !empty($this->parent_codcuenta)) {
             $parent = $this->getParent();
-            if ($parent->codejercicio != $this->codejercicio || $parent->idcuenta == $this->idcuenta) {
-                self::$miniLog->alert(self::$i18n->trans('account-parent-error'));
-                return false;
-            }
+            $this->parent_codcuenta = $parent->codcuenta;
+            $this->parent_idcuenta = $parent->idcuenta;
         }
 
         return parent::test();
@@ -199,25 +262,8 @@ class Cuenta extends Base\ModelClass
      *
      * @return string
      */
-    public function url(string $type = 'auto', string $list = 'List')
+    public function url(string $type = 'auto', string $list = 'ListCuenta?activetab=List')
     {
-        return parent::url($type, 'ListCuenta?activetab=List');
-    }
-
-    /**
-     * 
-     * @return bool
-     */
-    private function completeParentData()
-    {
-        $parent = $this->getParent();
-        if ($parent->exists() && $parent->codejercicio == $this->codejercicio && $parent->idcuenta != $this->idcuenta) {
-            $this->parent_codcuenta = $parent->codcuenta;
-            return true;
-        }
-
-        $this->parent_codcuenta = null;
-        $this->parent_idcuenta = null;
-        return false;
+        return parent::url($type, $list);
     }
 }

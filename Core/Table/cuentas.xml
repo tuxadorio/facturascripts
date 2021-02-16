@@ -28,7 +28,6 @@
         <name>idcuenta</name>
         <type>serial</type>
         <null>NO</null>
-        <default>nextval('cuentas_idcuenta_seq'::regclass)</default>
     </column>
     <column>
         <name>parent_codcuenta</name>
@@ -56,6 +55,6 @@
     </constraint>
     <constraint>
         <name>ca_cuentas_parent</name>
-        <type>FOREIGN KEY (parent_idcuenta) REFERENCES cuentas (idcuenta) ON DELETE RESTRICT ON UPDATE CASCADE</type>
+        <type>FOREIGN KEY (parent_idcuenta) REFERENCES cuentas (idcuenta) ON DELETE CASCADE ON UPDATE CASCADE</type>
     </constraint>
 </table>

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -69,6 +69,12 @@ class GroupItem extends VisualItem
 
     /**
      *
+     * @var string
+     */
+    public $valign;
+
+    /**
+     *
      * @param array $data
      */
     public function __construct($data)
@@ -79,28 +85,34 @@ class GroupItem extends VisualItem
         $this->numcolumns = isset($data['numcolumns']) ? (int) $data['numcolumns'] : 0;
         $this->order = isset($data['order']) ? (int) $data['order'] : 0;
         $this->title = isset($data['title']) ? $data['title'] : '';
+        $this->valign = isset($data['valign']) ? $data['valign'] : '';
         $this->loadColumns($data['children']);
     }
 
     /**
      *
      * @param object $model
+     * @param bool   $forceReadOnly
+     * @param bool   $onlyField
      *
      * @return string
      */
-    public function edit($model)
+    public function edit($model, $forceReadOnly = false, $onlyField = false)
     {
-        $divClass = ($this->numcolumns > 0) ? $this->css('col-md-') . $this->numcolumns : $this->css('col');
+        $divClass = $this->numcolumns > 0 ? $this->css('col-md-') . $this->numcolumns : $this->css('col');
         $divId = empty($this->id) ? '' : ' id="' . $this->id . '"';
-        $html = '<div' . $divId . ' class="' . $divClass . '">'
-            . '<div class="' . $this->css('form-row') . '">';
+        $rowClass = $this->css('form-row') . ' ' . $this->valign();
 
-        if (!empty($this->title)) {
+        $html = '<div' . $divId . ' class="' . $divClass . '"><div class="' . $rowClass . '">';
+        if ($this->title) {
             $html .= $this->legend();
         }
 
         foreach ($this->columns as $col) {
-            $html .= $col->edit($model);
+            if ($forceReadOnly) {
+                $col->widget->readonly = 'true';
+            }
+            $html .= $col->edit($model, $onlyField);
         }
 
         return $html . '</div></div>';
@@ -153,7 +165,7 @@ class GroupItem extends VisualItem
     }
 
     /**
-     * 
+     *
      * @param object  $model
      * @param Request $request
      */
@@ -178,17 +190,17 @@ class GroupItem extends VisualItem
             return 0;
         }
 
-        return ($column1->order < $column2->order) ? -1 : 1;
+        return $column1->order < $column2->order ? -1 : 1;
     }
 
     /**
-     * 
+     *
      * @return string
      */
     protected function legend()
     {
         $icon = empty($this->icon) ? '' : '<i class="' . $this->icon . ' fa-fw"></i> ';
-        return '<legend class="text-info">' . $icon . static::$i18n->trans($this->title) . '</legend>';
+        return '<legend class="text-info mt-3">' . $icon . static::$i18n->trans($this->title) . '</legend>';
     }
 
     /**
@@ -207,6 +219,24 @@ class GroupItem extends VisualItem
             $this->columns[$columnItem->name] = $columnItem;
         }
 
-        uasort($this->columns, ['self', 'sortColumns']);
+        \uasort($this->columns, ['self', 'sortColumns']);
+    }
+
+    /**
+     * 
+     * @return string
+     */
+    protected function valign()
+    {
+        switch ($this->valign) {
+            case 'bottom':
+                return 'align-items-end';
+
+            case 'center':
+                return 'align-items-center';
+
+            default:
+                return '';
+        }
     }
 }

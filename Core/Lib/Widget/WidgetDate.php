@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -79,7 +79,7 @@ class WidgetDate extends BaseWidget
             return date('d-m-Y', $this->value);
         }
 
-        return (string) $this->value;
+        return date('d-m-Y', strtotime($this->value));
     }
 
     /**
@@ -91,6 +91,8 @@ class WidgetDate extends BaseWidget
      */
     protected function tableCellClass($initialClass = '', $alternativeClass = '')
     {
+        $initialClass .= ' text-nowrap';
+
         /// is today? is the future?
         if (strtotime($this->value) >= strtotime(date('Y-m-d'))) {
             $alternativeClass = 'font-weight-bold';

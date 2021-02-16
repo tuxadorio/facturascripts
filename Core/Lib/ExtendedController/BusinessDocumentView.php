@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,11 +18,11 @@
  */
 namespace FacturaScripts\Core\Lib\ExtendedController;
 
-use FacturaScripts\Core\Base\DivisaTools;
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Core\Model\Base\BusinessDocumentLine;
+use FacturaScripts\Core\Model\Base\TransformerDocument;
 use FacturaScripts\Dinamic\Lib\AssetManager;
 use FacturaScripts\Dinamic\Lib\ExportManager;
-use FacturaScripts\Dinamic\Model\Base\BusinessDocumentLine;
+use FacturaScripts\Dinamic\Lib\Widget\ColumnItem;
 use FacturaScripts\Dinamic\Model\EstadoDocumento;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -33,6 +33,11 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class BusinessDocumentView extends BaseView
 {
+
+    const DEFAULT_TEMPLATE = 'Master/BusinessDocumentView.html.twig';
+    const ITEM_SELECT_LIMIT = 500;
+    const MODEL_NAMESPACE = '\\FacturaScripts\\Dinamic\\Model\\';
+    const MODEL_NAMESPACE_LIB = '\\FacturaScripts\\Dinamic\\Lib\\';
 
     /**
      *
@@ -48,6 +53,13 @@ class BusinessDocumentView extends BaseView
     public $lines = [];
 
     /**
+     * Model to use in this view.
+     *
+     * @var TransformerDocument
+     */
+    public $model;
+
+    /**
      * 
      * @param string $name
      * @param string $title
@@ -58,32 +70,40 @@ class BusinessDocumentView extends BaseView
     {
         parent::__construct($name, $title, $modelName, $icon);
         $this->documentStatus = $this->model->getAvaliableStatus();
-        $this->template = 'Master/BusinessDocumentView.html.twig';
     }
 
     /**
      * Method to export the view data.
      *
      * @param ExportManager $exportManager
+     *
+     * @return bool
      */
-    public function export(&$exportManager)
+    public function export(&$exportManager): bool
     {
-        $exportManager->generateBusinessDocPage($this->model);
+        return $exportManager->addBusinessDocPage($this->model);
     }
 
     /**
      * 
-     * @return array
+     * @return ColumnItem[]
      */
     public function getColumns()
     {
-        $keys = array_keys($this->columns);
-        if (empty($keys)) {
-            return [];
+        foreach ($this->columns as $group) {
+            return $group->columns;
         }
 
-        $key = $keys[0];
-        return $this->columns[$key]->columns;
+        return [];
+    }
+
+    /**
+     * 
+     * @return int
+     */
+    public function getMaxLines()
+    {
+        return \intval(\ini_get('max_input_vars') / \count($this->getColumns()));
     }
 
     /**
@@ -100,48 +120,78 @@ class BusinessDocumentView extends BaseView
         ];
 
         foreach ($this->getColumns() as $col) {
+            if ($col->hidden()) {
+                continue;
+            }
+
             $item = [
+                'className' => $this->getCellAlign($col->display),
                 'data' => $col->widget->fieldname,
                 'type' => $col->widget->getType(),
+                'readOnly' => ($col->widget->readonly == 'true' || !$this->model->editable)
             ];
 
-            if ($item['type'] === 'number' || $item['type'] === 'money') {
-                $item['type'] = 'numeric';
-                $item['numericFormat'] = DivisaTools::gridMoneyFormat();
-            } elseif ($item['type'] === 'autocomplete') {
+            if ($item['type'] === 'autocomplete') {
                 $item['source'] = $col->widget->getDataSource();
                 $item['strict'] = false;
                 $item['visibleRows'] = 5;
                 $item['trimDropdown'] = false;
+            } elseif (\in_array($item['type'], ['money', 'number', 'percentage'], true)) {
+                $item['type'] = 'numeric';
+                $item['numericFormat'] = $col->widget->gridFormat();
             }
 
-            if (!$col->hidden()) {
-                $data['columns'][] = $item;
-                $data['headers'][] = self::$i18n->trans($col->title);
-            }
+            $data['columns'][] = $item;
+            $data['headers'][] = $this->toolBox()->i18n()->trans($col->title);
         }
 
+        $fixColumns = ['descripcion', 'referencia'];
         foreach ($this->lines as $line) {
             $lineArray = [];
-            foreach ($line->getModelFields() as $key => $field) {
-                $lineArray[$key] = $line->{$key};
+            foreach (\array_keys($line->getModelFields()) as $key) {
+                $lineArray[$key] = \in_array($key, $fixColumns) ? $this->toolBox()->utils()->fixHtml($line->{$key}) : $line->{$key};
             }
-            $lineArray['descripcion'] = Utils::fixHtml($lineArray['descripcion']);
             $data['rows'][] = $lineArray;
         }
 
-        return json_encode($data);
+        return \json_encode($data);
+    }
+
+    /**
+     * Returns an array with all data from selected model.
+     *
+     * @param string $modelName
+     *
+     * @return array
+     */
+    public function getSelectValues($modelName)
+    {
+        $classModel = self::MODEL_NAMESPACE . $modelName;
+        if (\class_exists($classModel)) {
+            $values = [];
+            $model = new $classModel();
+
+            $order = [$model->primaryDescriptionColumn() => 'ASC'];
+            foreach ($model->all([], $order, 0, self::ITEM_SELECT_LIMIT) as $newModel) {
+                $values[$newModel->primaryColumnValue()] = $newModel->primaryDescription();
+            }
+
+            return $values;
+        }
+
+        $classLib = self::MODEL_NAMESPACE_LIB . $modelName;
+        return \class_exists($classLib) ? $classLib::all() : [];
     }
 
     /**
      * 
-     * @param string|bool $code
-     * @param array       $where
-     * @param int         $order
-     * @param int         $offset
-     * @param int         $limit
+     * @param string $code
+     * @param array  $where
+     * @param int    $order
+     * @param int    $offset
+     * @param int    $limit
      */
-    public function loadData($code = false, $where = [], $order = [], $offset = 0, $limit = FS_ITEM_LIMIT)
+    public function loadData($code = '', $where = [], $order = [], $offset = 0, $limit = \FS_ITEM_LIMIT)
     {
         if ($this->newCode !== null) {
             $code = $this->newCode;
@@ -153,19 +203,9 @@ class BusinessDocumentView extends BaseView
 
         $this->model->loadFromCode($code);
         $this->lines = empty($this->model->primaryColumnValue()) ? [] : $this->model->getLines();
-        
+
         $this->count = count($this->lines);
         $this->title = $this->model->codigo;
-    }
-
-    /**
-     * 
-     * @param array $data
-     */
-    public function loadFromData(array &$data)
-    {
-        parent::loadFromData($data);
-        $this->model->updateSubject();
     }
 
     /**
@@ -179,13 +219,17 @@ class BusinessDocumentView extends BaseView
     public function processFormLines(array $formLines)
     {
         $newLines = [];
-        $order = count($formLines);
-        foreach ($formLines as $data) {
-            $line = ['orden' => $order];
-            foreach ($this->getColumns() as $col) {
-                $line[$col->widget->fieldname] = isset($data[$col->widget->fieldname]) ? $data[$col->widget->fieldname] : null;
+        $order = \count($formLines);
+        foreach ($formLines as $line) {
+            if (is_array($line)) {
+                $line['orden'] = $order;
+                $newLines[] = $line;
+                $order--;
+                continue;
             }
-            $newLines[] = $line;
+
+            /// empty line
+            $newLines[] = ['orden' => $order];
             $order--;
         }
 
@@ -202,11 +246,15 @@ class BusinessDocumentView extends BaseView
         switch ($case) {
             case 'load':
                 foreach ($request->query->all() as $key => $value) {
-                    if ($key != 'code') {
-                        $this->model->{$key} = $value;
+                    if ($key == 'code') {
+                        continue;
+                    }
+
+                    $this->model->{$key} = $value;
+                    if ($key == $this->model->subjectColumn()) {
+                        $this->model->updateSubject();
                     }
                 }
-                $this->model->updateSubject();
                 break;
         }
     }
@@ -216,8 +264,28 @@ class BusinessDocumentView extends BaseView
      */
     protected function assets()
     {
-        AssetManager::add('css', FS_ROUTE . '/node_modules/handsontable/dist/handsontable.full.min.css');
-        AssetManager::add('js', FS_ROUTE . '/node_modules/handsontable/dist/handsontable.full.min.js');
-        AssetManager::add('js', FS_ROUTE . '/Dinamic/Assets/JS/BusinessDocumentView.js');
+        AssetManager::add('css', \FS_ROUTE . '/node_modules/handsontable/dist/handsontable.full.min.css');
+        AssetManager::add('js', \FS_ROUTE . '/node_modules/handsontable/dist/handsontable.full.min.js');
+        AssetManager::add('js', \FS_ROUTE . '/Dinamic/Assets/JS/BusinessDocumentView.js');
+    }
+
+    /**
+     * 
+     * @param string $code
+     *
+     * @return string
+     */
+    protected function getCellAlign($code): string
+    {
+        switch ($code) {
+            case 'center':
+                return 'htCenter';
+
+            case 'right':
+                return 'htRight';
+
+            default:
+                return 'htLeft';
+        }
     }
 }

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,7 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController\ListBusinessDocument;
+use FacturaScripts\Dinamic\Lib\ExtendedController\ListBusinessDocument;
 
 /**
  * Controller to list the items in the AlbaranCliente model
@@ -37,12 +37,11 @@ class ListAlbaranCliente extends ListBusinessDocument
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'delivery-notes';
-        $pagedata['icon'] = 'fas fa-copy';
-        $pagedata['menu'] = 'sales';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'sales';
+        $data['title'] = 'delivery-notes';
+        $data['icon'] = 'fas fa-copy';
+        return $data;
     }
 
     /**
@@ -51,6 +50,9 @@ class ListAlbaranCliente extends ListBusinessDocument
     protected function createViews()
     {
         $this->createViewSales('ListAlbaranCliente', 'AlbaranCliente', 'delivery-notes');
+        $this->addButtonGroupDocument('ListAlbaranCliente');
+        $this->addButtonApproveDocument('ListAlbaranCliente');
+
         $this->createViewLines('ListLineaAlbaranCliente', 'LineaAlbaranCliente');
     }
 }

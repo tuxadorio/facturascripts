@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -26,6 +26,17 @@ namespace FacturaScripts\Core\Base;
 class MiniLog
 {
 
+    const ALL_LEVELS = ['critical', 'debug', 'error', 'info', 'notice', 'warning'];
+    const DEFAULT_CHANNEL = 'master';
+    const DEFAULT_LEVELS = ['critical', 'error', 'info', 'notice', 'warning'];
+
+    /**
+     * Current channel.
+     *
+     * @var string
+     */
+    private $channel;
+
     /**
      * Contains the log data.
      *
@@ -34,17 +45,12 @@ class MiniLog
     private static $dataLog = [];
 
     /**
-     * Action must be taken immediately.
-     *
-     * Example: Entire website down, dataBase unavailable, etc. This should
-     * trigger the SMS alerts and wake you up.
-     *
-     * @param string $message
-     * @param array  $context
+     * 
+     * @param string $channel
      */
-    public function alert($message, array $context = [])
+    public function __construct(string $channel = '')
     {
-        $this->log('alert', $message, $context);
+        $this->channel = empty($channel) ? self::DEFAULT_CHANNEL : $channel;
     }
 
     /**
@@ -63,7 +69,7 @@ class MiniLog
      * @param string $message
      * @param array  $context
      */
-    public function critical($message, array $context = [])
+    public function critical(string $message, array $context = [])
     {
         $this->log('critical', $message, $context);
     }
@@ -74,20 +80,9 @@ class MiniLog
      * @param string $message
      * @param array  $context
      */
-    public function debug($message, array $context = [])
+    public function debug(string $message, array $context = [])
     {
         $this->log('debug', $message, $context);
-    }
-
-    /**
-     * System is unusable.
-     *
-     * @param string $message
-     * @param array  $context
-     */
-    public function emergency($message, array $context = [])
-    {
-        $this->log('emergency', $message, $context);
     }
 
     /**
@@ -97,20 +92,18 @@ class MiniLog
      * @param string $message
      * @param array  $context
      */
-    public function error($message, array $context = [])
+    public function error(string $message, array $context = [])
     {
         $this->log('error', $message, $context);
     }
 
     /**
-     * Interesting events.
-     *
-     * Example: User logs in, SQL logs.
+     * Interesting information, advices.
      *
      * @param string $message
      * @param array  $context
      */
-    public function info($message, array $context = [])
+    public function info(string $message, array $context = [])
     {
         $this->log('info', $message, $context);
     }
@@ -121,23 +114,23 @@ class MiniLog
      * @param string $message
      * @param array  $context
      */
-    public function notice($message, array $context = [])
+    public function notice(string $message, array $context = [])
     {
         $this->log('notice', $message, $context);
     }
 
     /**
-     * Returns specified level messages or all.
-     *
+     * Returns specified level messages of this channel.
+     * 
      * @param array $levels
      *
      * @return array
      */
-    public function read(array $levels = ['info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency'])
+    public function read(array $levels = self::DEFAULT_LEVELS): array
     {
         $messages = [];
         foreach (self::$dataLog as $data) {
-            if (in_array($data['level'], $levels, false) && $data['message'] !== '') {
+            if ($data['channel'] === $this->channel && in_array($data['level'], $levels, false)) {
                 $messages[] = $data;
             }
         }
@@ -146,14 +139,22 @@ class MiniLog
     }
 
     /**
-     * SQL history.
+     * Returns specified level messages of all channels.
+     * 
+     * @param array $levels
      *
-     * @param string $message
-     * @param array  $context
+     * @return array
      */
-    public function sql($message, array $context = [])
+    public function readAll(array $levels = self::DEFAULT_LEVELS): array
     {
-        $this->log('sql', $message, $context);
+        $messages = [];
+        foreach (self::$dataLog as $data) {
+            if (in_array($data['level'], $levels, false)) {
+                $messages[] = $data;
+            }
+        }
+
+        return $messages;
     }
 
     /**
@@ -165,7 +166,7 @@ class MiniLog
      * @param string $message
      * @param array  $context
      */
-    public function warning($message, array $context = [])
+    public function warning(string $message, array $context = [])
     {
         $this->log('warning', $message, $context);
     }
@@ -177,13 +178,17 @@ class MiniLog
      * @param string $message
      * @param array  $context
      */
-    private function log($level, $message, array $context = [])
+    protected function log(string $level, string $message, array $context = [])
     {
-        self::$dataLog[] = [
-            'context' => $context,
-            'level' => $level,
-            'message' => $message,
-            'time' => time(),
-        ];
+        if (!empty($message)) {
+            self::$dataLog[] = [
+                'channel' => $this->channel,
+                'context' => $context,
+                'level' => $level,
+                'message' => $message,
+                'microtime' => microtime(true),
+                'time' => time(),
+            ];
+        }
     }
 }

@@ -23,7 +23,6 @@
     <column>
         <name>coddivisa</name>
         <type>character varying(3)</type>
-        <null>NO</null>
     </column>
     <column>
         <name>codserie</name>
@@ -81,7 +80,6 @@
         <name>idpartida</name>
         <type>serial</type>
         <null>NO</null>
-        <default>nextval('partidas_idpartida_seq'::regclass)</default>
     </column>
     <column>
         <name>idsubcuenta</name>

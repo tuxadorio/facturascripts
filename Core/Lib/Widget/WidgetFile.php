@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -25,10 +25,26 @@ use Symfony\Component\HttpFoundation\Request;
 /**
  * Description of WidgetFile
  *
- * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Carlos García Gómez <carlos@facturascripts.com>
  */
 class WidgetFile extends BaseWidget
 {
+
+    /**
+     *
+     * @var string
+     */
+    public $accept;
+
+    /**
+     * 
+     * @param array $data
+     */
+    public function __construct($data)
+    {
+        parent::__construct($data);
+        $this->accept = $data['accept'] ?? '';
+    }
 
     /**
      * 
@@ -42,17 +58,20 @@ class WidgetFile extends BaseWidget
     public function edit($model, $title = '', $description = '', $titleurl = '')
     {
         $this->setValue($model);
-        $description = static::$i18n->trans('help-server-accepts-filesize', ['%size%' => $this->getMaxFileUpload()]) . ' ' . $description;
+
+        $additionalDesc = static::$i18n->trans('help-server-accepts-filesize', ['%size%' => $this->getMaxFileUpload()]);
+        $finalDesc = empty($description) ? $additionalDesc : static::$i18n->trans($description) . ' ' . $additionalDesc;
+
         if ($this->readonly()) {
-            $cssFormControl = $this->css('form-control');
+            $class = $this->combineClasses($this->css('form-control'), $this->class);
             return '<div class="form-group">'
                 . '<label>' . $this->onclickHtml(static::$i18n->trans($title), $titleurl) . '</label>'
                 . '<input type="hidden" name="' . $this->fieldname . '" value="' . $this->value . '"/>'
-                . '<input type="text" value="' . $this->show() . '" class="' . $cssFormControl . '" readonly=""/>'
+                . '<input type="text" value="' . $this->show() . '" class="' . $class . '" readonly=""/>'
                 . '</div>';
         }
 
-        return parent::edit($model, $title, $description, $titleurl);
+        return parent::edit($model, $title, $finalDesc, $titleurl);
     }
 
     /**
@@ -68,7 +87,7 @@ class WidgetFile extends BaseWidget
         foreach ($request->files->all() as $key => $uploadFile) {
             if ($key != $this->fieldname || is_null($uploadFile)) {
                 continue;
-            } elseif (!$uploadFile->isValid()) {
+            } elseif (false === $uploadFile->isValid()) {
                 $minilog->error($uploadFile->getErrorMessage());
                 continue;
             }
@@ -79,7 +98,7 @@ class WidgetFile extends BaseWidget
                 continue;
             }
 
-            if ($uploadFile->move(FS_FOLDER . DIRECTORY_SEPARATOR . 'MyFiles', $uploadFile->getClientOriginalName())) {
+            if ($uploadFile->move(\FS_FOLDER . DIRECTORY_SEPARATOR . 'MyFiles', $uploadFile->getClientOriginalName())) {
                 $model->{$this->fieldname} = $uploadFile->getClientOriginalName();
                 break;
             }
@@ -110,5 +129,19 @@ class WidgetFile extends BaseWidget
         $class = empty($extraClass) ? $this->css('form-control-file') : $this->css('form-control-file') . ' ' . $extraClass;
         return '<input type="' . $type . '" name="' . $this->fieldname . '" value="' . $this->value
             . '" class="' . $class . '"' . $this->inputHtmlExtraParams() . '/>';
+    }
+
+    /**
+     * 
+     * @return string
+     */
+    protected function inputHtmlExtraParams()
+    {
+        $html = parent::inputHtmlExtraParams();
+        if (!empty($this->accept)) {
+            $html .= ' accept="' . $this->accept . '"';
+        }
+
+        return $html;
     }
 }

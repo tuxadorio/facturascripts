@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,14 +18,14 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Dinamic\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\ListController;
 
 /**
  * Controller to list the items in the User model
  *
  * @author Carlos García Gómez <carlos@facturascripts.com>
  */
-class ListUser extends ExtendedController\ListController
+class ListUser extends ListController
 {
 
     /**
@@ -35,24 +35,11 @@ class ListUser extends ExtendedController\ListController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'users';
-        $pagedata['icon'] = 'fas fa-users';
-        $pagedata['menu'] = 'admin';
-
-        return $pagedata;
-    }
-
-    /**
-     * 
-     * @param string $name
-     */
-    protected function createViewRoles($name = 'ListRole')
-    {
-        $this->addView($name, 'Role', 'roles', 'fas fa-address-card');
-        $this->addSearchFields($name, ['codrole', 'descripcion']);
-        $this->addOrderBy($name, ['descripcion'], 'description');
-        $this->addOrderBy($name, ['codrole'], 'code');
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['title'] = 'users';
+        $data['icon'] = 'fas fa-users';
+        return $data;
     }
 
     /**
@@ -60,31 +47,51 @@ class ListUser extends ExtendedController\ListController
      */
     protected function createViews()
     {
-        $this->createViewUsers();
-        $this->createViewRoles();
+        $this->createViewsUsers();
+        $this->createViewsRoles();
     }
 
     /**
      * 
-     * @param string $name
+     * @param string $viewName
      */
-    protected function createViewUsers($name = 'ListUser')
+    protected function createViewsRoles(string $viewName = 'ListRole')
     {
-        $this->addView($name, 'User', 'users', 'fas fa-users');
-        $this->addSearchFields($name, ['nick', 'email']);
-        $this->addOrderBy($name, ['nick'], 'nick', 1);
-        $this->addOrderBy($name, ['email'], 'email');
-        $this->addOrderBy($name, ['level'], 'level');
-        $this->addOrderBy($name, ['lastactivity'], 'last-activity');
+        $this->addView($viewName, 'Role', 'roles', 'fas fa-address-card');
+        $this->addSearchFields($viewName, ['codrole', 'descripcion']);
+        $this->addOrderBy($viewName, ['descripcion'], 'description');
+        $this->addOrderBy($viewName, ['codrole'], 'code');
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewsUsers(string $viewName = 'ListUser')
+    {
+        $this->addView($viewName, 'User', 'users', 'fas fa-users');
+        $this->addSearchFields($viewName, ['nick', 'email']);
+        $this->addOrderBy($viewName, ['nick'], 'nick', 1);
+        $this->addOrderBy($viewName, ['email'], 'email');
+        $this->addOrderBy($viewName, ['level'], 'level');
+        $this->addOrderBy($viewName, ['creationdate'], 'creation-date');
+        $this->addOrderBy($viewName, ['lastactivity'], 'last-activity');
 
         /// filters
         $levels = $this->codeModel->all('users', 'level', 'level');
-        $this->addFilterSelect($name, 'level', 'level', 'level', $levels);
-
-        $companies = $this->codeModel->all('empresas', 'idempresa', 'nombrecorto');
-        $this->addFilterSelect($name, 'company', 'company', 'idempresa', $companies);
+        $this->addFilterSelect($viewName, 'level', 'level', 'level', $levels);
 
         $languages = $this->codeModel->all('users', 'langcode', 'langcode');
-        $this->addFilterSelect($name, 'langcode', 'lang-code', 'langcode', $languages);
+        $this->addFilterSelect($viewName, 'langcode', 'language', 'langcode', $languages);
+
+        $companies = $this->codeModel->all('empresas', 'idempresa', 'nombrecorto');
+        if (\count($companies) > 2) {
+            $this->addFilterSelect($viewName, 'idempresa', 'company', 'idempresa', $companies);
+        }
+
+        $warehouses = $this->codeModel->all('almacenes', 'codalmacen', 'nombre');
+        if (\count($warehouses) > 2) {
+            $this->addFilterSelect($viewName, 'codalmacen', 'warehouse', 'codalmacen', $warehouses);
+        }
     }
 }

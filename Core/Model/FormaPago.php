@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,7 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Dinamic\Model\CuentaBanco as DinCuentaBanco;
 
 /**
  * Payment method of an invoice, delivery note, order or estimation.
@@ -59,13 +59,6 @@ class FormaPago extends Base\ModelClass
     public $domiciliado;
 
     /**
-     * Paid -> mark the invoices generated as paid.
-     *
-     * @var string
-     */
-    public $genrecibos;
-
-    /**
      * Company identifier.
      *
      * @var int
@@ -73,12 +66,11 @@ class FormaPago extends Base\ModelClass
     public $idempresa;
 
     /**
-     * True (default) -> display the data in sales documents,
-     * including the associated bank account.
+     * Indicate if pay or not
      *
      * @var bool
      */
-    public $imprimir;
+    public $pagado;
 
     /**
      * Expiration period.
@@ -101,10 +93,47 @@ class FormaPago extends Base\ModelClass
     {
         parent::clear();
         $this->domiciliado = false;
-        $this->genrecibos = 'Emitidos';
-        $this->imprimir = true;
         $this->plazovencimiento = 0;
         $this->tipovencimiento = 'days';
+    }
+
+    /**
+     * Removes payment method from database.
+     * 
+     * @return bool
+     */
+    public function delete()
+    {
+        if ($this->isDefault()) {
+            $this->toolBox()->i18nLog()->warning('cant-delete-default-payment-method');
+            return false;
+        }
+
+        return parent::delete();
+    }
+
+    /**
+     * Return the the banck account.
+     *
+     * @return DinCuentaBanco
+     */
+    public function getBankAccount()
+    {
+        $bank = new DinCuentaBanco();
+        $bank->loadFromCode($this->codcuentabanco);
+        return $bank;
+    }
+
+    /**
+     * Returns the date with the expiration term applied.
+     * 
+     * @param string $date
+     *
+     * @return string
+     */
+    public function getExpiration($date)
+    {
+        return \date(self::DATE_STYLE, \strtotime($date . ' +' . $this->plazovencimiento . ' ' . $this->tipovencimiento));
     }
 
     /**
@@ -117,6 +146,16 @@ class FormaPago extends Base\ModelClass
         new CuentaBanco();
 
         return parent::install();
+    }
+
+    /**
+     * Returns True if this is the default payment method.
+     *
+     * @return bool
+     */
+    public function isDefault()
+    {
+        return $this->codpago === $this->toolBox()->appSettings()->get('default', 'codpago');
     }
 
     /**
@@ -146,14 +185,39 @@ class FormaPago extends Base\ModelClass
      */
     public function test()
     {
-        $this->descripcion = Utils::noHtml($this->descripcion);
+        $this->codpago = $this->toolBox()->utils()->noHtml($this->codpago);
+        $this->descripcion = $this->toolBox()->utils()->noHtml($this->descripcion);
 
-        /// we check the expiration validity
-        if ($this->plazovencimiento < 0) {
-            self::$miniLog->alert(self::$i18n->trans('number-expiration-invalid'));
+        if ($this->codpago && 1 !== \preg_match('/^[A-Z0-9_\+\.\-\s]{1,10}$/i', $this->codpago)) {
+            $this->toolBox()->i18nLog()->error(
+                'invalid-alphanumeric-code',
+                ['%value%' => $this->codpago, '%column%' => 'codpago', '%min%' => '1', '%max%' => '10']
+            );
+            return false;
+        } elseif ($this->plazovencimiento < 0) {
+            $this->toolBox()->i18nLog()->warning('number-expiration-invalid');
             return false;
         }
 
+        if (empty($this->idempresa)) {
+            $this->idempresa = $this->toolBox()->appSettings()->get('default', 'idempresa');
+        }
+
         return parent::test();
+    }
+
+    /**
+     * 
+     * @param array $values
+     *
+     * @return bool
+     */
+    protected function saveInsert(array $values = [])
+    {
+        if (empty($this->codpago)) {
+            $this->codpago = (string) $this->newCode();
+        }
+
+        return parent::saveInsert($values);
     }
 }

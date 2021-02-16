@@ -1,6 +1,6 @@
 /*!
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez  <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez  <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -20,6 +20,13 @@ var listViewDeleteCancel = "";
 var listViewDeleteConfirm = "";
 var listViewDeleteMessage = "";
 var listViewDeleteTitle = "";
+
+function listViewCheckboxes(viewName) {
+    var checked = $("#form" + viewName + " .listActionCB").prop("checked");
+    $("#form" + viewName + " .listAction").each(function () {
+        $(this).prop("checked", checked);
+    });
+}
 
 function listViewDelete(viewName) {
     bootbox.confirm({
@@ -47,8 +54,9 @@ function listViewDelete(viewName) {
 
 function listViewPrintAction(viewName, option) {
     $("#form" + viewName + " :input[name=\"action\"]").val('export');
-    $("#form" + viewName + "").append('<input type="hidden" name="option" value="' + option + '"/>');
+    $("#form" + viewName).append('<input type="hidden" name="option" value="' + option + '"/>');
     $("#form" + viewName).submit();
+    $("#form" + viewName + " :input[name=\"action\"]").val('');
 }
 
 function listViewSetAction(viewName, value) {
@@ -62,11 +70,13 @@ function listViewSetLoadFilter(viewName, value) {
 }
 
 function listViewSetOffset(viewName, value) {
+    $("#form" + viewName + " :input[name=\"action\"]").val('');
     $("#form" + viewName + " :input[name=\"offset\"]").val(value);
     $("#form" + viewName).submit();
 }
 
 function listViewSetOrder(viewName, value) {
+    $("#form" + viewName + " :input[name=\"action\"]").val('');
     $("#form" + viewName + " :input[name=\"order\"]").val(value);
     $("#form" + viewName).submit();
 }
@@ -76,11 +86,6 @@ function listViewShowFilters(viewName) {
 }
 
 $(document).ready(function () {
-    // set/unset all delete checkbox
-    $(".listActionCB").click(function () {
-        var checked = $(this).prop("checked");
-        $(".listAction").prop("checked", checked);
-    });
     // disable enter key press
     $(".noEnterKey").keypress(function (e) {
         return !(e.which == 13 || e.keyCode == 13);

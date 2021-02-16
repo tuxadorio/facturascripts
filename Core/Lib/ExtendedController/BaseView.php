@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,15 +18,15 @@
  */
 namespace FacturaScripts\Core\Lib\ExtendedController;
 
-use FacturaScripts\Core\Base;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Lib\Widget\ColumnItem;
-use FacturaScripts\Core\Lib\Widget\GroupItem;
+use FacturaScripts\Core\Base\ToolBox;
 use FacturaScripts\Core\Lib\Widget\VisualItem;
-use FacturaScripts\Core\Lib\Widget\VisualItemLoadEngine;
 use FacturaScripts\Core\Model\Base\ModelClass;
-use FacturaScripts\Core\Model\PageOption;
-use FacturaScripts\Core\Model\User;
+use FacturaScripts\Dinamic\Lib\Widget\ColumnItem;
+use FacturaScripts\Dinamic\Lib\Widget\GroupItem;
+use FacturaScripts\Dinamic\Lib\Widget\VisualItemLoadEngine;
+use FacturaScripts\Dinamic\Model\PageOption;
+use FacturaScripts\Dinamic\Model\User;
 
 /**
  * Base definition for the views used in ExtendedControllers
@@ -37,9 +37,11 @@ use FacturaScripts\Core\Model\User;
 abstract class BaseView
 {
 
+    const DEFAULT_TEMPLATE = 'Master/BaseView.html.twig';
+
     /**
      *
-     * @var array
+     * @var GroupItem[]
      */
     protected $columns = [];
 
@@ -62,20 +64,6 @@ abstract class BaseView
      * @var string
      */
     public $icon;
-
-    /**
-     * Contains the translator.
-     *
-     * @var Base\Translator
-     */
-    protected static $i18n;
-
-    /**
-     * App log manager.
-     *
-     * @var Base\MiniLog
-     */
-    protected static $miniLog;
 
     /**
      *
@@ -158,12 +146,12 @@ abstract class BaseView
     /**
      * Method to export the view data.
      */
-    abstract public function export(&$exportManager);
+    abstract public function export(&$exportManager): bool;
 
     /**
      * Loads view data.
      */
-    abstract public function loadData($code = false, $where = [], $order = [], $offset = 0, $limit = FS_ITEM_LIMIT);
+    abstract public function loadData($code = '', $where = [], $order = [], $offset = 0, $limit = \FS_ITEM_LIMIT);
 
     /**
      * Process form data.
@@ -180,15 +168,10 @@ abstract class BaseView
      */
     public function __construct($name, $title, $modelName, $icon)
     {
-        if (!isset(static::$i18n)) {
-            static::$i18n = new Base\Translator();
-            static::$miniLog = new Base\MiniLog();
-        }
-
-        if (class_exists($modelName)) {
+        if (\class_exists($modelName)) {
             $this->model = new $modelName();
         } else {
-            static::$miniLog->critical(static::$i18n->trans('model-not-found', ['%model%' => $modelName]));
+            $this->toolBox()->i18nLog()->critical('model-not-found', ['%model%' => $modelName]);
         }
 
         $this->icon = $icon;
@@ -201,9 +184,13 @@ abstract class BaseView
             'btnPrint' => false,
             'btnSave' => true,
             'btnUndo' => true,
+            'card' => true,
+            'checkBoxes' => true,
+            'clickable' => true,
+            'megasearch' => false
         ];
-        $this->template = 'Master/BaseView.html.twig';
-        $this->title = static::$i18n->trans($title);
+        $this->template = static::DEFAULT_TEMPLATE;
+        $this->title = $this->toolBox()->i18n()->trans($title);
         $this->assets();
     }
 
@@ -252,38 +239,19 @@ abstract class BaseView
     }
 
     /**
-     * Establishes the column's edit state
+     * Establishes the column's display or read only state.
      *
      * @param string $columnName
      * @param bool   $disabled
+     * @param string $readOnly
      */
-    public function disableColumn($columnName, $disabled = true)
+    public function disableColumn($columnName, $disabled = true, $readOnly = '')
     {
         $column = $this->columnForName($columnName);
-        if (!empty($column)) {
+        if ($column) {
             $column->display = $disabled ? 'none' : 'left';
+            $column->widget->readonly = empty($readOnly) ? $column->widget->readonly : $readOnly;
         }
-    }
-
-    /**
-     * Gets the column by the column name from source group
-     *
-     * @param string $columnName
-     * @param array  $source
-     *
-     * @return ColumnItem
-     */
-    public function getColumnForName(string $columnName, &$source)
-    {
-        foreach ($source as $group) {
-            foreach ($group->columns as $key => $column) {
-                if ($key === $columnName) {
-                    return $column;
-                }
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -321,18 +289,18 @@ abstract class BaseView
             $pages[$key1] = [
                 'active' => ($key2 == $this->offset),
                 'num' => $key1 + 1,
-                'offset' => $key1 * FS_ITEM_LIMIT,
+                'offset' => $key1 * \FS_ITEM_LIMIT,
             ];
             if ($key2 == $this->offset) {
                 $current = $key1;
             }
             $key1++;
-            $key2 += FS_ITEM_LIMIT;
+            $key2 += \FS_ITEM_LIMIT;
         }
 
         /// now descarting pages
-        foreach (array_keys($pages) as $key2) {
-            $middle = intval($key1 / 2);
+        foreach (\array_keys($pages) as $key2) {
+            $middle = \intval($key1 / 2);
 
             /**
              * We discard everything except the first page, the last one, the middle one,
@@ -343,7 +311,7 @@ abstract class BaseView
             }
         }
 
-        return (count($pages) > 1) ? $pages : [];
+        return \count($pages) > 1 ? $pages : [];
     }
 
     /**
@@ -390,14 +358,14 @@ abstract class BaseView
      */
     public function loadPageOptions($user = false)
     {
-        if (!is_bool($user)) {
+        if (false === \is_bool($user)) {
             /// sets user security level for use in render
             VisualItem::setLevel($user->level);
         }
 
         $orderby = ['nick' => 'ASC'];
         $where = $this->getPageWhere($user);
-        if (!$this->pageOption->loadFromCode('', $where, $orderby)) {
+        if (false === $this->pageOption->loadFromCode('', $where, $orderby)) {
             $viewName = explode('-', $this->name)[0];
             VisualItemLoadEngine::installXML($viewName, $this->pageOption);
         }
@@ -414,22 +382,47 @@ abstract class BaseView
     }
 
     /**
+     * Gets the column by the column name from source group
+     *
+     * @param string $columnName
+     * @param array  $source
+     *
+     * @return ColumnItem
+     */
+    protected function getColumnForName(string $columnName, &$source)
+    {
+        foreach ($source as $group) {
+            foreach ($group->columns as $key => $column) {
+                if ($key === $columnName) {
+                    return $column;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Returns DataBaseWhere[] for locate a pageOption model.
      *
      * @param User|false $user
      */
     protected function getPageWhere($user = false)
     {
-        $viewName = explode('-', $this->name)[0];
-
-        if (is_bool($user)) {
-            return [new DataBaseWhere('name', $viewName)];
-        }
-
-        return [
+        $viewName = \explode('-', $this->name)[0];
+        return \is_bool($user) ? [new DataBaseWhere('name', $viewName)] : [
             new DataBaseWhere('name', $viewName),
             new DataBaseWhere('nick', $user->nick),
-            new DataBaseWhere('nick', 'NULL', 'IS', 'OR'),
+            new DataBaseWhere('nick', null, 'IS', 'OR')
         ];
+    }
+
+    /**
+     * 
+     * @return ToolBox
+     */
+    protected function toolBox()
+    {
+        return new ToolBox();
     }
 }

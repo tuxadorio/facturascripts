@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,8 +18,11 @@
  */
 namespace FacturaScripts\Core\App;
 
-use FacturaScripts\Core\Base;
-use FacturaScripts\Core\Lib\IPFilter;
+use FacturaScripts\Core\Base\DataBase;
+use FacturaScripts\Core\Base\MiniLogSave;
+use FacturaScripts\Core\Base\PluginManager;
+use FacturaScripts\Core\Base\TelemetryManager;
+use FacturaScripts\Core\Base\ToolBox;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -32,44 +35,16 @@ abstract class App
 {
 
     /**
-     * Cache access manager.
-     *
-     * @var Base\Cache
-     */
-    protected $cache;
-
-    /**
      * Database access manager.
      *
-     * @var Base\DataBase
+     * @var DataBase
      */
     protected $dataBase;
 
     /**
-     * Translation engine.
-     *
-     * @var Base\Translator
-     */
-    protected $i18n;
-
-    /**
-     * IP filter.
-     *
-     * @var IPFilter
-     */
-    protected $ipFilter;
-
-    /**
-     * App log manager.
-     *
-     * @var Base\MiniLog
-     */
-    protected $miniLog;
-
-    /**
      * Plugin manager.
      *
-     * @var Base\PluginManager
+     * @var PluginManager
      */
     protected $pluginManager;
 
@@ -88,25 +63,13 @@ abstract class App
     protected $response;
 
     /**
-     * Stored defaut configuration with the application settings.
-     *
-     * @var AppSettings
-     */
-    protected $settings;
-
-    /**
      * Requested Uri
      *
      * @var string
      */
     protected $uri;
 
-    /**
-     * Selects and runs the corresponding controller.
-     *
-     * @return bool
-     */
-    abstract public function run();
+    abstract protected function die(int $status, string $message = '');
 
     /**
      * Initializes the app.
@@ -117,24 +80,18 @@ abstract class App
     {
         $this->request = Request::createFromGlobals();
         if ($this->request->cookies->get('fsLang')) {
-            $this->i18n = new Base\Translator($this->request->cookies->get('fsLang'));
-        } else {
-            $this->i18n = new Base\Translator();
+            $this->toolBox()->i18n()->setDefaultLang($this->request->cookies->get('fsLang'));
         }
 
-        $this->cache = new Base\Cache();
-        $this->dataBase = new Base\DataBase();
-        $this->ipFilter = new IPFilter();
-        $this->miniLog = new Base\MiniLog();
-        $this->pluginManager = new Base\PluginManager();
+        $this->dataBase = new DataBase();
+        $this->pluginManager = new PluginManager();
         $this->response = new Response();
-        $this->settings = new AppSettings();
         $this->uri = $uri;
 
         /// timezone
-        date_default_timezone_set(FS_TIMEZONE);
+        \date_default_timezone_set(\FS_TIMEZONE);
 
-        $this->miniLog->debug('URI: ' . $this->uri);
+        $this->toolBox()->log()->debug('URI: ' . $this->uri);
     }
 
     /**
@@ -142,10 +99,10 @@ abstract class App
      *
      * @return bool
      */
-    public function connect()
+    public function connect(): bool
     {
         if ($this->dataBase->connect()) {
-            $this->settings->load();
+            $this->toolBox()->appSettings()->load();
             $this->loadPlugins();
             return true;
         }
@@ -160,11 +117,14 @@ abstract class App
      */
     public function close(string $nick = '')
     {
-        new Base\MiniLogSave($this->request->getClientIp() ?? '', $nick, $this->uri);
+        /// send telemetry (if configured)
+        $telemetry = new TelemetryManager();
+        $telemetry->update();
+
+        /// save log
+        new MiniLogSave($this->toolBox()->ipFilter()->getClientIp(), $nick, $this->uri);
+
         $this->dataBase->close();
-        if (FS_DEBUG) {
-            ///$this->cache->clear();
-        }
     }
 
     /**
@@ -176,16 +136,45 @@ abstract class App
     }
 
     /**
+     * Runs the application core.
+     * 
+     * @return bool
+     */
+    public function run(): bool
+    {
+        if (false === $this->dataBase->connected()) {
+            $this->toolBox()->i18nLog()->critical('cant-connect-database');
+            $this->die(Response::HTTP_INTERNAL_SERVER_ERROR);
+            return false;
+        } elseif ($this->isIPBanned()) {
+            $this->toolBox()->i18nLog()->critical('ip-banned');
+            $this->die(Response::HTTP_TOO_MANY_REQUESTS);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Returns param number $num in uri.
      *
      * @param int $num
      *
      * @return string
      */
-    protected function getUriParam(string $num)
+    protected function getUriParam(string $num): string
     {
-        $params = explode('/', substr($this->uri, 1));
+        $params = \explode('/', \substr($this->uri, 1));
         return isset($params[$num]) ? $params[$num] : '';
+    }
+
+    /**
+     * Add or increase the attempt counter of the current client IP address.
+     */
+    protected function ipWarning()
+    {
+        $ipFilter = $this->toolBox()->ipFilter();
+        $ipFilter->setAttempt($ipFilter->getClientIp());
     }
 
     /**
@@ -193,9 +182,10 @@ abstract class App
      *
      * @return bool
      */
-    protected function isIPBanned()
+    protected function isIPBanned(): bool
     {
-        return $this->ipFilter->isBanned($this->request->getClientIp());
+        $ipFilter = $this->toolBox()->ipFilter();
+        return $ipFilter->isBanned($ipFilter->getClientIp());
     }
 
     /**
@@ -204,11 +194,20 @@ abstract class App
     private function loadPlugins()
     {
         foreach ($this->pluginManager->enabledPlugins() as $pluginName) {
-            $initClass = "FacturaScripts\\Plugins\\{$pluginName}\\Init";
-            if (class_exists($initClass)) {
+            $initClass = '\\FacturaScripts\\Plugins\\' . $pluginName . '\\Init';
+            if (\class_exists($initClass)) {
                 $initObject = new $initClass();
                 $initObject->init();
             }
         }
+    }
+
+    /**
+     * 
+     * @return ToolBox
+     */
+    protected function toolBox()
+    {
+        return new ToolBox();
     }
 }

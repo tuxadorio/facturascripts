@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,16 +18,16 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Core\Lib\ExtendedController\ListController;
 
 /**
  * Controller to list the items in the Proveedor model
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Cristo M. Estévez Hernández <cristom.estevez@gmail.com>
+ * @author Carlos García Gómez          <carlos@facturascripts.com>
+ * @author Cristo M. Estévez Hernández  <cristom.estevez@gmail.com>
  */
-class ListProveedor extends ExtendedController\ListController
+class ListProveedor extends ListController
 {
 
     /**
@@ -37,12 +37,11 @@ class ListProveedor extends ExtendedController\ListController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'suppliers';
-        $pagedata['icon'] = 'fas fa-users';
-        $pagedata['menu'] = 'purchases';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'purchases';
+        $data['title'] = 'suppliers';
+        $data['icon'] = 'fas fa-users';
+        return $data;
     }
 
     /**
@@ -54,48 +53,80 @@ class ListProveedor extends ExtendedController\ListController
         $this->createViewAdresses();
     }
 
-    private function createViewAdresses()
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewAdresses(string $viewName = 'ListContacto')
     {
-        $this->addView('ListContacto', 'Contacto', 'addresses-and-contacts', 'fas fa-address-book');
-        $this->addSearchFields('ListContacto', ['nombre', 'apellidos', 'email']);
-        $this->addOrderBy('ListContacto', ['email'], 'email');
-        $this->addOrderBy('ListContacto', ['nombre'], 'name');
-        $this->addOrderBy('ListContacto', ['empresa'], 'company');
-        $this->addOrderBy('ListContacto', ['level'], 'level');
-        $this->addOrderBy('ListContacto', ['lastactivity'], 'last-activity', 2);
+        $this->addView($viewName, 'Contacto', 'addresses-and-contacts', 'fas fa-address-book');
+        $this->addSearchFields($viewName, ['nombre', 'apellidos', 'email']);
+        $this->addOrderBy($viewName, ['descripcion'], 'description');
+        $this->addOrderBy($viewName, ['direccion'], 'address');
+        $this->addOrderBy($viewName, ['nombre'], 'name');
+        $this->addOrderBy($viewName, ['fechaalta'], 'creation-date', 2);
+
+        /// filters
+        $values = [
+            [
+                'label' => $this->toolBox()->i18n()->trans('suppliers'),
+                'where' => [new DataBaseWhere('codproveedor', null, 'IS NOT')]
+            ]
+        ];
+        $this->addFilterSelectWhere($viewName, 'type', $values);
 
         $cargoValues = $this->codeModel->all('contactos', 'cargo', 'cargo');
-        $this->addFilterSelect('ListContacto', 'cargo', 'position', 'cargo', $cargoValues);
+        $this->addFilterSelect($viewName, 'cargo', 'position', 'cargo', $cargoValues);
 
-        $counties = $this->codeModel->all('paises', 'codpais', 'nombre');
-        $this->addFilterSelect('ListContacto', 'codpais', 'country', 'codpais', $counties);
+        $countries = $this->codeModel->all('paises', 'codpais', 'nombre');
+        $this->addFilterSelect($viewName, 'codpais', 'country', 'codpais', $countries);
 
         $provinces = $this->codeModel->all('contactos', 'provincia', 'provincia');
-        $this->addFilterSelect('ListContacto', 'provincia', 'province', 'provincia', $provinces);
+        $this->addFilterSelect($viewName, 'provincia', 'province', 'provincia', $provinces);
 
         $cities = $this->codeModel->all('contactos', 'ciudad', 'ciudad');
-        $this->addFilterSelect('ListContacto', 'ciudad', 'city', 'ciudad', $cities);
+        $this->addFilterSelect($viewName, 'ciudad', 'city', 'ciudad', $cities);
 
-        $this->addFilterCheckbox('ListContacto', 'verificado', 'verified', 'verificado');
-        $this->addFilterCheckbox('ListContacto', 'admitemarketing', 'allow-marketing', 'admitemarketing');
+        $this->addFilterCheckbox($viewName, 'verificado', 'verified', 'verificado');
+        $this->addFilterCheckbox($viewName, 'admitemarketing', 'allow-marketing', 'admitemarketing');
 
         /// disable megasearch
-        $this->setSettings('ListContacto', 'megasearch', false);
+        $this->setSettings($viewName, 'megasearch', false);
     }
 
-    private function createViewSuppliers()
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewSuppliers(string $viewName = 'ListProveedor')
     {
-        $this->addView('ListProveedor', 'Proveedor', 'suppliers', 'fas fa-users');
-        $this->addSearchFields('ListProveedor', ['cifnif', 'codproveedor', 'email', 'nombre', 'observaciones', 'razonsocial', 'telefono1', 'telefono2']);
-        $this->addOrderBy('ListProveedor', ['codproveedor'], 'code');
-        $this->addOrderBy('ListProveedor', ['nombre'], 'name', 1);
-        $this->addOrderBy('ListProveedor', ['fecha'], 'date');
+        $this->addView($viewName, 'Proveedor', 'suppliers', 'fas fa-users');
+        $this->addSearchFields($viewName, ['cifnif', 'codproveedor', 'email', 'nombre', 'observaciones', 'razonsocial', 'telefono1', 'telefono2']);
+        $this->addOrderBy($viewName, ['codproveedor'], 'code');
+        $this->addOrderBy($viewName, ['cifnif'], 'fiscal-number');
+        $this->addOrderBy($viewName, ['nombre'], 'name', 1);
+        $this->addOrderBy($viewName, ['fechaalta'], 'creation-date');
 
+        /// filters
         $values = [
-            ['label' => $this->i18n->trans('only-active'), 'where' => [new DataBaseWhere('debaja', false)]],
-            ['label' => $this->i18n->trans('only-suspended'), 'where' => [new DataBaseWhere('debaja', true)]],
-            ['label' => $this->i18n->trans('all'), 'where' => []]
+            ['label' => $this->toolBox()->i18n()->trans('only-active'), 'where' => [new DataBaseWhere('debaja', false)]],
+            ['label' => $this->toolBox()->i18n()->trans('only-suspended'), 'where' => [new DataBaseWhere('debaja', true)]],
+            ['label' => $this->toolBox()->i18n()->trans('all'), 'where' => []]
         ];
-        $this->addFilterSelectWhere('ListProveedor', 'status', $values);
+        $this->addFilterSelectWhere($viewName, 'status', $values);
+
+        $series = $this->codeModel->all('series', 'codserie', 'descripcion');
+        $this->addFilterSelect($viewName, 'codserie', 'series', 'codserie', $series);
+
+        $retentions = $this->codeModel->all('retenciones', 'codretencion', 'descripcion');
+        $this->addFilterSelect($viewName, 'codretencion', 'retentions', 'codretencion', $retentions);
+
+        $paymentMethods = $this->codeModel->all('formaspago', 'codpago', 'descripcion');
+        $this->addFilterSelect($viewName, 'codpago', 'payment-methods', 'codpago', $paymentMethods);
+
+        $vatRegimes = $this->codeModel->all('proveedores', 'regimeniva', 'regimeniva');
+        $this->addFilterSelect($viewName, 'regimeniva', 'vat-regime', 'regimeniva', $vatRegimes);
+
+        $this->addFilterCheckbox($viewName, 'acreedor', 'is-creditor');
     }
 }

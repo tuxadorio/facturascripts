@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez  <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,8 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Dinamic\Model\Contacto as DinContacto;
+use FacturaScripts\Dinamic\Model\Producto as DinProducto;
 
 /**
  * The agent/employee is the one associated with a delivery note, invoice o box.
@@ -26,19 +27,13 @@ use FacturaScripts\Core\Base\Utils;
  * can be associated with several user of none at all.
  *
  * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Artex Trading sa <jcuello@artextrading.com>
+ * @author Artex Trading sa    <jcuello@artextrading.com>
  */
 class Agente extends Base\Contact
 {
 
     use Base\ModelTrait;
-
-    /**
-     * Bank account.
-     *
-     * @var string
-     */
-    public $banco;
+    use Base\ProductRelationTrait;
 
     /**
      * Position in the company.
@@ -48,46 +43,18 @@ class Agente extends Base\Contact
     public $cargo;
 
     /**
-     * Contact city.
-     *
-     * @var string
-     */
-    public $ciudad;
-
-    /**
      * Primary key. Varchar (10).
      *
-     * @var int
+     * @var string
      */
     public $codagente;
 
     /**
-     * Contact country.
-     *
-     * @var string
-     */
-    public $codpais;
-
-    /**
-     * Postal code of the contact.
-     *
-     * @var string
-     */
-    public $codpostal;
-
-    /**
-     * True -> the customer no longer buys us or we do not want anything with him.
+     * True -> the agent no longer buys us or we do not want anything with him.
      *
      * @var boolean
      */
     public $debaja;
-
-    /**
-     * Address of the contact.
-     *
-     * @var string
-     */
-    public $direccion;
 
     /**
      * Date of withdrawal from the company.
@@ -97,40 +64,37 @@ class Agente extends Base\Contact
     public $fechabaja;
 
     /**
-     * Birthdate.
+     * Default contact data
      *
-     * @var string
+     * @var integer
      */
-    public $fechanacimiento;
+    public $idcontacto;
 
     /**
-     * Percentage of the agent's commission. It is used in budgets, orders, delivery notes and invoices.
+     * Returns the addresses associated with the provider.
      *
-     * @var float|int
+     * @return DinContacto
      */
-    public $porcomision;
-
-    /**
-     * Contact province.
-     *
-     * @var string
-     */
-    public $provincia;
-
-    /**
-     * Social security number.
-     *
-     * @var string
-     */
-    public $seg_social;
-
-    /**
-     * Reset values of all model properties.
-     */
-    public function clear()
+    public function getContact()
     {
-        parent::clear();
-        $this->porcomision = 0.00;
+        $contact = new DinContacto();
+        $contact->loadFromCode($this->idcontacto);
+        return $contact;
+    }
+
+    /**
+     * This function is called when creating the model table. Returns the SQL
+     * that will be executed after the creation of the table. Useful to insert values
+     * default.
+     *
+     * @return string
+     */
+    public function install()
+    {
+        /// needed dependencies
+        new DinProducto();
+
+        return parent::install();
     }
 
     /**
@@ -170,22 +134,50 @@ class Agente extends Base\Contact
      */
     public function test()
     {
-        $this->banco = Utils::noHtml($this->banco);
-        $this->cargo = Utils::noHtml($this->cargo);
-        $this->ciudad = Utils::noHtml($this->ciudad);
-        $this->codpostal = Utils::noHtml($this->codpostal);
-        $this->direccion = Utils::noHtml($this->direccion);
-        $this->provincia = Utils::noHtml($this->provincia);
-        $this->seg_social = Utils::noHtml($this->seg_social);
+        $this->cargo = $this->toolBox()->utils()->noHtml($this->cargo);
 
-        if (empty($this->codagente)) {
-            $this->codagente = $this->newCode();
+        if (!empty($this->codagente) && 1 !== \preg_match('/^[A-Z0-9_\+\.\-]{1,10}$/i', $this->codagente)) {
+            $this->toolBox()->i18nLog()->error(
+                'invalid-alphanumeric-code',
+                ['%value%' => $this->codagente, '%column%' => 'codagente', '%min%' => '1', '%max%' => '10']
+            );
+            return false;
         }
 
-        if ($this->debaja && empty($this->fechabaja)) {
-            $this->fechabaja = date('d-m-Y');
-        }
-
+        $this->debaja = !empty($this->fechabaja);
         return parent::test();
+    }
+
+    /**
+     *
+     * @param array $values
+     *
+     * @return bool
+     */
+    protected function saveInsert(array $values = [])
+    {
+        if (empty($this->codagente)) {
+            $this->codagente = (string) $this->newCode();
+        }
+
+        if (parent::saveInsert($values)) {
+            /// creates new contact
+            $contact = new DinContacto();
+            $contact->cifnif = $this->cifnif;
+            $contact->codagente = $this->codagente;
+            $contact->descripcion = $this->nombre;
+            $contact->email = $this->email;
+            $contact->nombre = $this->nombre;
+            $contact->telefono1 = $this->telefono1;
+            $contact->telefono2 = $this->telefono2;
+            if ($contact->save()) {
+                $this->idcontacto = $contact->idcontacto;
+                return $this->save();
+            }
+
+            return true;
+        }
+
+        return false;
     }
 }

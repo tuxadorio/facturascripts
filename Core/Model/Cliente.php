@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,6 +19,8 @@
 namespace FacturaScripts\Core\Model;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Dinamic\Model\CuentaBancoCliente as DinCuentaBancoCliente;
+use FacturaScripts\Dinamic\Model\Contacto as DinContacto;
 
 /**
  * The client. You can have one or more associated addresses and sub-accounts.
@@ -31,7 +33,7 @@ class Cliente extends Base\ComercialContact
     use Base\ModelTrait;
 
     /**
-     * Employee assigned to this customer. Agent model.
+     * Agent assigned to this customer. Agent model.
      *
      * @var string
      */
@@ -45,19 +47,18 @@ class Cliente extends Base\ComercialContact
     public $codgrupo;
 
     /**
+     *
+     * @var string
+     */
+    public $codtarifa;
+
+    /**
      * Preferred payment days when calculating the due date of invoices.
      * Days separated by commas: 1,15,31
      *
      * @var string
      */
     public $diaspago;
-
-    /**
-     * Default contact for sending documentation
-     *
-     * @var integer
-     */
-    public $idcontactofact;
 
     /**
      * Default contact for the shipment of products
@@ -67,52 +68,98 @@ class Cliente extends Base\ComercialContact
     public $idcontactoenv;
 
     /**
-     * 
-     * @param string $query
-     * @param string $fieldcode
+     * Default contact for sending documentation
+     *
+     * @var integer
+     */
+    public $idcontactofact;
+
+    /**
+     *
+     * @var float
+     */
+    public $riesgoalcanzado;
+
+    /**
+     *
+     * @var float
+     */
+    public $riesgomax;
+
+    public function clear()
+    {
+        parent::clear();
+        $this->codretencion = $this->toolBox()->appSettings()->get('default', 'codretencion');
+    }
+
+    /**
+     *
+     * @param string          $query
+     * @param string          $fieldcode
+     * @param DataBaseWhere[] $where
      *
      * @return CodeModel[]
      */
-    public function codeModelSearch(string $query, string $fieldcode = '')
+    public function codeModelSearch(string $query, string $fieldcode = '', $where = [])
     {
         $field = empty($fieldcode) ? $this->primaryColumn() : $fieldcode;
         $fields = 'cifnif|codcliente|email|nombre|observaciones|razonsocial|telefono1|telefono2';
-        $where = [new DataBaseWhere($fields, mb_strtolower($query, 'UTF8'), 'LIKE')];
+        $where[] = new DataBaseWhere($fields, \mb_strtolower($query, 'UTF8'), 'LIKE');
         return CodeModel::all($this->tableName(), $field, $this->primaryDescriptionColumn(), false, $where);
     }
 
     /**
-     * Returns an array with the addresses associated with the client.
+     * Returns an array with the addresses associated with this customer.
      *
-     * @return Contacto[]
+     * @return DinContacto[]
      */
     public function getAdresses()
     {
-        $contactModel = new Contacto();
-        return $contactModel->all([new DataBaseWhere('codcliente', $this->codcliente)]);
+        $contactModel = new DinContacto();
+        $where = [new DataBaseWhere($this->primaryColumn(), $this->primaryColumnValue())];
+        return $contactModel->all($where, [], 0, 0);
+    }
+
+    /**
+     * Returns the bank accounts associated with this customer.
+     * 
+     * @return DinCuentaBancoCliente[]
+     */
+    public function getBankAccounts()
+    {
+        $contactAccounts = new DinCuentaBancoCliente();
+        $where = [new DataBaseWhere($this->primaryColumn(), $this->primaryColumnValue())];
+        return $contactAccounts->all($where, [], 0, 0);
     }
 
     /**
      * Return the default billing or shipping address.
      *
-     * @return Contacto
+     * @return DinContacto
      */
     public function getDefaultAddress($type = 'billing')
     {
-        $contact = new Contacto();
-        switch ($type) {
-            case 'shipping':
-                $where = [new DataBaseWhere('idcontacto', $this->idcontactoenv)];
-                $contact->loadFromCode('', $where);
-                break;
+        $contact = new DinContacto();
+        $idcontact = $type === 'shipping' ? $this->idcontactoenv : $this->idcontactofact;
+        $contact->loadFromCode($idcontact);
+        return $contact;
+    }
 
-            default:
-                $where = [new DataBaseWhere('idcontacto', $this->idcontactofact)];
-                $contact->loadFromCode('', $where);
-                break;
+    /**
+     * Returns the preferred payment days for this customer.
+     * 
+     * @return array
+     */
+    public function getPaymentDays()
+    {
+        $days = [];
+        foreach (\explode(',', $this->diaspago . ',') as $str) {
+            if (\is_numeric(\trim($str))) {
+                $days[] = \trim($str);
+            }
         }
 
-        return $contact;
+        return $days;
     }
 
     /**
@@ -125,7 +172,8 @@ class Cliente extends Base\ComercialContact
     public function install()
     {
         /// we need exits Contacto before, but we can't check it because it would create a cyclic check
-        /// we need to check model GrupoClientes before
+        /// we need to check Agente and GrupoClientes models before
+        new Agente();
         new GrupoClientes();
 
         return parent::install();
@@ -168,44 +216,55 @@ class Cliente extends Base\ComercialContact
      */
     public function test()
     {
-        $this->codcliente = empty($this->codcliente) ? (string) $this->newCode() : trim($this->codcliente);
+        if (!empty($this->codcliente) && 1 !== \preg_match('/^[A-Z0-9_\+\.\-]{1,10}$/i', $this->codcliente)) {
+            $this->toolBox()->i18nLog()->error(
+                'invalid-alphanumeric-code',
+                ['%value%' => $this->codcliente, '%column%' => 'codcliente', '%min%' => '1', '%max%' => '10']
+            );
+            return false;
+        }
 
         /// we validate the days of payment
         $arrayDias = [];
-        foreach (str_getcsv($this->diaspago) as $day) {
+        foreach (\str_getcsv($this->diaspago) as $day) {
             if ((int) $day >= 1 && (int) $day <= 31) {
                 $arrayDias[] = (int) $day;
             }
         }
-        $this->diaspago = empty($arrayDias) ? null : implode(',', $arrayDias);
-
+        $this->diaspago = empty($arrayDias) ? null : \implode(',', $arrayDias);
         return parent::test();
     }
 
     /**
-     * 
+     *
      * @param array $values
      *
      * @return bool
      */
     protected function saveInsert(array $values = [])
     {
+        if (empty($this->codcliente)) {
+            $this->codcliente = (string) $this->newCode();
+        }
+
         $return = parent::saveInsert($values);
         if ($return && empty($this->idcontactofact)) {
+            $parts = \explode(' ', $this->nombre);
+
             /// creates new contact
-            $contact = new Contacto();
+            $contact = new DinContacto();
+            $contact->apellidos = \count($parts) > 1 ? \implode(' ', \array_slice($parts, 1)) : '';
             $contact->cifnif = $this->cifnif;
             $contact->codcliente = $this->codcliente;
             $contact->descripcion = $this->nombre;
             $contact->email = $this->email;
             $contact->empresa = $this->razonsocial;
             $contact->fax = $this->fax;
-            $contact->nombre = $this->nombre;
+            $contact->nombre = $parts[0];
             $contact->personafisica = $this->personafisica;
             $contact->telefono1 = $this->telefono1;
             $contact->telefono2 = $this->telefono2;
             if ($contact->save()) {
-                $this->idcontactoenv = $contact->idcontacto;
                 $this->idcontactofact = $contact->idcontacto;
                 return $this->save();
             }

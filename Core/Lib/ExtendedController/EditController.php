@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -39,8 +39,20 @@ abstract class EditController extends PanelController
      */
     public function getModel()
     {
-        $viewName = array_keys($this->views)[0];
+        $viewName = $this->getMainViewName();
         return $this->views[$viewName]->model;
+    }
+
+    /**
+     * Return the basic data for this page.
+     *
+     * @return array
+     */
+    public function getPageData()
+    {
+        $data = parent::getPageData();
+        $data['showonmenu'] = false;
+        return $data;
     }
 
     /**
@@ -48,12 +60,13 @@ abstract class EditController extends PanelController
      */
     protected function createViews()
     {
-        $modelName = $this->getModelClassName();
         $viewName = 'Edit' . $this->getModelClassName();
+        $modelName = $this->getModelClassName();
         $title = $this->getPageData()['title'];
         $viewIcon = $this->getPageData()['icon'];
 
         $this->addEditView($viewName, $modelName, $title, $viewIcon);
+        $this->setSettings($viewName, 'btnPrint', true);
     }
 
     /**
@@ -64,19 +77,25 @@ abstract class EditController extends PanelController
      */
     protected function loadData($viewName, $view)
     {
-        /**
-         * We need the identifier to load the model. It's almost always code,
-         * but sometimes it's not.
-         */
-        $primaryKey = $this->request->request->get($view->model->primaryColumn());
-        $code = $this->request->query->get('code', $primaryKey);
-        $view->loadData($code);
+        $mainViewName = $this->getMainViewName();
+        switch ($viewName) {
+            case $mainViewName:
+                /**
+                 * We need the identifier to load the model. It's almost always code,
+                 * but sometimes it's not.
+                 */
+                $primaryKey = $this->request->request->get($view->model->primaryColumn());
+                $code = $this->request->query->get('code', $primaryKey);
+                $view->loadData($code);
 
-        /// data not found?
-        $action = $this->request->request->get('action', '');
-        $mainViewName = 'Edit' . $this->getModelClassName();
-        if (!empty($code) && !$view->model->exists() && $viewName === $mainViewName && '' === $action) {
-            $this->miniLog->warning($this->i18n->trans('record-not-found'));
+                /// Data not found?
+                $action = $this->request->request->get('action', '');
+                if ('' === $action && !empty($code) && !$view->model->exists()) {
+                    $this->toolBox()->i18nLog()->warning('record-not-found');
+                } else {
+                    $this->title .= ' ' . $view->model->primaryDescription();
+                }
+                break;
         }
     }
 }

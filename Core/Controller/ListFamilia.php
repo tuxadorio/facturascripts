@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,15 +18,15 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\ListController;
 
 /**
  * Controller to list the items in the Familia model
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Artex Trading sa <jcuello@artextrading.com>
+ * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Artex Trading sa     <jcuello@artextrading.com>
  */
-class ListFamilia extends ExtendedController\ListController
+class ListFamilia extends ListController
 {
 
     /**
@@ -36,12 +36,11 @@ class ListFamilia extends ExtendedController\ListController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'families';
-        $pagedata['icon'] = 'fas fa-object-group';
-        $pagedata['menu'] = 'warehouse';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'warehouse';
+        $data['title'] = 'families';
+        $data['icon'] = 'fas fa-sitemap';
+        return $data;
     }
 
     /**
@@ -49,7 +48,7 @@ class ListFamilia extends ExtendedController\ListController
      */
     protected function createViews()
     {
-        $this->addView('ListFamilia', 'Familia', 'families', 'fas fa-object-group');
+        $this->addView('ListFamilia', 'Familia', 'families', 'fas fa-sitemap');
         $this->addSearchFields('ListFamilia', ['descripcion', 'codfamilia', 'madre']);
         $this->addOrderBy('ListFamilia', ['codfamilia'], 'code');
         $this->addOrderBy('ListFamilia', ['descripcion'], 'description');

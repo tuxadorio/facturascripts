@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,9 +18,8 @@
  */
 namespace FacturaScripts\Core\Lib\ExtendedController;
 
-use FacturaScripts\Core\Base;
+use FacturaScripts\Core\Base\ControllerPermissions;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Lib\ListFilter;
 use FacturaScripts\Dinamic\Model\User;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -37,37 +36,31 @@ abstract class ListController extends BaseController
     /**
      * Initializes all the objects and properties.
      *
-     * @param Base\Cache      $cache
-     * @param Base\Translator $i18n
-     * @param Base\MiniLog    $miniLog
-     * @param string          $className
-     * @param string          $uri
+     * @param string $className
+     * @param string $uri
      */
-    public function __construct(&$cache, &$i18n, &$miniLog, $className, $uri = '')
+    public function __construct(string $className, string $uri = '')
     {
-        parent::__construct($cache, $i18n, $miniLog, $className, $uri);
+        parent::__construct($className, $uri);
         $this->setTemplate('Master/ListController');
     }
 
     /**
      * Runs the controller's private logic.
      *
-     * @param Response                   $response
-     * @param User                       $user
-     * @param Base\ControllerPermissions $permissions
+     * @param Response              $response
+     * @param User                  $user
+     * @param ControllerPermissions $permissions
      */
     public function privateCore(&$response, $user, $permissions)
     {
         parent::privateCore($response, $user, $permissions);
 
-        // Create views to show
-        $this->createViews();
-
-        // Store action to execute
+        // Get action to execute
         $action = $this->request->request->get('action', $this->request->query->get('action', ''));
 
-        // Operations with data, before execute action
-        if (!$this->execPreviousAction($action)) {
+        // Execute actions before loaging data
+        if (false === $this->execPreviousAction($action) || false === $this->pipe('execPreviousAction', $action)) {
             return;
         }
 
@@ -80,22 +73,12 @@ abstract class ListController extends BaseController
             }
 
             $this->loadData($viewName, $view);
+            $this->pipe('loadData', $viewName, $view);
         }
 
-        // Operations with data, after execute action
+        // Execute actions after loaging data
         $this->execAfterAction($action);
-    }
-
-    /**
-     * Base method to add a filter to the view
-     *
-     * @param string                $viewName
-     * @param string                $key
-     * @param ListFilter\BaseFilter $filter
-     */
-    protected function addFilter($viewName, $key, $filter)
-    {
-        $this->views[$viewName]->filters[$key] = $filter;
+        $this->pipe('execAfterAction', $action);
     }
 
     /**
@@ -112,8 +95,7 @@ abstract class ListController extends BaseController
      */
     protected function addFilterAutocomplete($viewName, $key, $label, $field, $table, $fieldcode = '', $fieldtitle = '', $where = [])
     {
-        $filter = new ListFilter\AutocompleteFilter($key, $field, $label, $table, $fieldcode, $fieldtitle, $where);
-        $this->addFilter($viewName, $key, $filter);
+        $this->views[$viewName]->addFilterAutocomplete($key, $label, $field, $table, $fieldcode, $fieldtitle, $where);
     }
 
     /**
@@ -129,8 +111,7 @@ abstract class ListController extends BaseController
      */
     protected function addFilterCheckbox($viewName, $key, $label = '', $field = '', $operation = '=', $matchValue = true, $default = [])
     {
-        $filter = new ListFilter\CheckboxFilter($key, $field, $label, $operation, $matchValue, $default);
-        $this->addFilter($viewName, $key, $filter);
+        $this->views[$viewName]->addFilterCheckbox($key, $label, $field, $operation, $matchValue, $default);
     }
 
     /**
@@ -144,8 +125,7 @@ abstract class ListController extends BaseController
      */
     protected function addFilterDatePicker($viewName, $key, $label = '', $field = '', $operation = '>=')
     {
-        $filter = new ListFilter\DateFilter($key, $field, $label, $operation);
-        $this->addFilter($viewName, $key, $filter);
+        $this->views[$viewName]->addFilterDatePicker($key, $label, $field, $operation);
     }
 
     /**
@@ -159,8 +139,7 @@ abstract class ListController extends BaseController
      */
     protected function addFilterNumber($viewName, $key, $label = '', $field = '', $operation = '>=')
     {
-        $filter = new ListFilter\NumberFilter($key, $field, $label, $operation);
-        $this->addFilter($viewName, $key, $filter);
+        $this->views[$viewName]->addFilterNumber($key, $label, $field, $operation);
     }
 
     /**
@@ -174,8 +153,7 @@ abstract class ListController extends BaseController
      */
     protected function addFilterPeriod($viewName, $key, $label, $field)
     {
-        $filter = new ListFilter\PeriodFilter($key, $field, $label);
-        $this->addFilter($viewName, $key, $filter);
+        $this->views[$viewName]->addFilterPeriod($key, $label, $field);
     }
 
     /**
@@ -189,8 +167,7 @@ abstract class ListController extends BaseController
      */
     protected function addFilterSelect($viewName, $key, $label, $field, $values = [])
     {
-        $filter = new ListFilter\SelectFilter($key, $field, $label, $values);
-        $this->addFilter($viewName, $key, $filter);
+        $this->views[$viewName]->addFilterSelect($key, $label, $field, $values);
     }
 
     /**
@@ -209,8 +186,7 @@ abstract class ListController extends BaseController
      */
     protected function addFilterSelectWhere($viewName, $key, $values)
     {
-        $filter = new ListFilter\SelectWhereFilter($key, $values);
-        $this->addFilter($viewName, $key, $filter);
+        $this->views[$viewName]->addFilterSelectWhere($key, $values);
     }
 
     /**
@@ -236,9 +212,7 @@ abstract class ListController extends BaseController
      */
     protected function addSearchFields(string $viewName, array $fields)
     {
-        foreach ($fields as $field) {
-            $this->views[$viewName]->searchFields[] = $field;
-        }
+        $this->views[$viewName]->addSearchFields($fields);
     }
 
     /**
@@ -255,6 +229,7 @@ abstract class ListController extends BaseController
         $view = new ListView($viewName, $title, self::MODEL_NAMESPACE . $modelName, $icon);
         $this->addCustomView($viewName, $view);
         $this->setSettings($viewName, 'btnPrint', true);
+        $this->setSettings($viewName, 'card', false);
         $this->setSettings($viewName, 'megasearch', true);
     }
 
@@ -265,12 +240,12 @@ abstract class ListController extends BaseController
     {
         $idfilter = $this->request->request->get('loadfilter', 0);
         if ($this->views[$this->active]->deletePageFilter($idfilter)) {
-            $this->miniLog->notice($this->i18n->trans('record-deleted-correctly'));
+            $this->toolBox()->i18nLog()->notice('record-deleted-correctly');
             $this->request->request->remove('loadfilter');
             return;
         }
 
-        $this->miniLog->warning($this->i18n->trans('record-deleted-error'));
+        $this->toolBox()->i18nLog()->warning('record-deleted-error');
     }
 
     /**
@@ -282,10 +257,7 @@ abstract class ListController extends BaseController
     {
         switch ($action) {
             case 'export':
-                $this->setTemplate(false);
-                $this->exportManager->newDoc($this->request->get('option', ''));
-                $this->views[$this->active]->export($this->exportManager);
-                $this->exportManager->show($this->response);
+                $this->exportAction();
                 break;
 
             case 'megasearch':
@@ -326,6 +298,14 @@ abstract class ListController extends BaseController
         return true;
     }
 
+    protected function exportAction()
+    {
+        $this->setTemplate(false);
+        $this->exportManager->newDoc($this->request->get('option', ''));
+        $this->views[$this->active]->export($this->exportManager);
+        $this->exportManager->show($this->response);
+    }
+
     /**
      *
      * @param string   $viewName
@@ -343,11 +323,10 @@ abstract class ListController extends BaseController
     {
         $this->setTemplate(false);
         $json = [];
-        $query = $this->request->get('query', '');
 
         /// we search in all listviews
         foreach ($this->views as $viewName => $listView) {
-            if (!$this->getSettings($viewName, 'megasearch')) {
+            if (false === $this->getSettings($viewName, 'megasearch') || empty($listView->searchFields)) {
                 continue;
             }
 
@@ -355,16 +334,16 @@ abstract class ListController extends BaseController
                 'title' => $listView->title,
                 'icon' => $listView->icon,
                 'columns' => $this->megaSearchColumns($listView),
-                'results' => [],
+                'results' => []
             ];
 
-            $fields = implode('|', $listView->searchFields);
-            $where = [new DataBaseWhere($fields, $query, 'LIKE')];
+            $fields = \implode('|', $listView->searchFields);
+            $where = [new DataBaseWhere($fields, $this->request->get('query', ''), 'LIKE')];
             $listView->loadData(false, $where);
             foreach ($listView->cursor as $model) {
                 $item = ['url' => $model->url()];
                 foreach ($listView->getColumns() as $col) {
-                    if (!$col->hidden()) {
+                    if (false === $col->hidden()) {
                         $item[$col->widget->fieldname] = $col->widget->plainText($model);
                     }
                 }
@@ -373,7 +352,7 @@ abstract class ListController extends BaseController
             }
         }
 
-        $this->response->setContent(json_encode($json));
+        $this->response->setContent(\json_encode($json));
     }
 
     /**
@@ -387,8 +366,8 @@ abstract class ListController extends BaseController
     {
         $result = [];
         foreach ($view->getColumns() as $col) {
-            if (!$col->hidden()) {
-                $result[] = $this->i18n->trans($col->title);
+            if (false === $col->hidden()) {
+                $result[] = $this->toolBox()->i18n()->trans($col->title);
             }
         }
 
@@ -400,10 +379,9 @@ abstract class ListController extends BaseController
      */
     protected function saveFilterAction()
     {
-        $view = $this->views[$this->active];
-        $idFilter = $view->savePageFilter($this->request, $this->user);
+        $idFilter = $this->views[$this->active]->savePageFilter($this->request, $this->user);
         if (!empty($idFilter)) {
-            $this->miniLog->notice($this->i18n->trans('record-updated-correctly'));
+            $this->toolBox()->i18nLog()->notice('record-updated-correctly');
 
             /// load filters in request
             $this->request->request->set('loadfilter', $idFilter);

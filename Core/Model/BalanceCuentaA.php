@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2014-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2014-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,7 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 
 /**
  * Abbreviated detail of a balance.
@@ -63,26 +63,21 @@ class BalanceCuentaA extends Base\ModelClass
      *
      * @param string $cod
      *
-     * @return self[]
+     * @return static[]
      */
     public function allFromCodbalance($cod)
     {
-        $balist = [];
-        $sql = 'SELECT * FROM ' . static::tableName()
-            . ' WHERE codbalance = ' . self::$dataBase->var2str($cod) . ' ORDER BY codcuenta ASC;';
-
-        $data = self::$dataBase->select($sql);
-        if (!empty($data)) {
-            foreach ($data as $b) {
-                $balist[] = new self($b);
-            }
-        }
-
-        return $balist;
+        $where = [new DataBaseWhere('codbalance', $cod)];
+        return $this->all($where, ['codcuenta' => 'ASC'], 0, 0);
     }
 
+    /**
+     * 
+     * @return string
+     */
     public function install()
     {
+        /// needed dependency
         new Balance();
 
         return parent::install();
@@ -135,7 +130,7 @@ class BalanceCuentaA extends Base\ModelClass
         } else {
             $sql = "SELECT SUM(debe) AS debe, SUM(haber) AS haber FROM partidas
             WHERE idsubcuenta IN (SELECT idsubcuenta FROM co_subcuentas
-               WHERE codcuenta LIKE '" . Utils::noHtml($this->codcuenta) . "%'"
+               WHERE codcuenta LIKE '" . $this->toolBox()->utils()->noHtml($this->codcuenta) . "%'"
                 . ' AND codejercicio = ' . self::$dataBase->var2str($ejercicio->codejercicio) . ')' . $extra . ';';
             $data = self::$dataBase->select($sql);
         }
@@ -152,19 +147,16 @@ class BalanceCuentaA extends Base\ModelClass
      *
      * @param string $cod
      *
-     * @return self[]
+     * @return static[]
      */
     public function searchByCodbalance($cod)
     {
         $balist = [];
         $sql = 'SELECT * FROM ' . static::tableName()
-            . " WHERE codbalance LIKE '" . Utils::noHtml($cod) . "%' ORDER BY codcuenta ASC;";
+            . " WHERE codbalance LIKE '" . $this->toolBox()->utils()->noHtml($cod) . "%' ORDER BY codcuenta ASC;";
 
-        $data = self::$dataBase->select($sql);
-        if (!empty($data)) {
-            foreach ($data as $b) {
-                $balist[] = new self($b);
-            }
+        foreach (self::$dataBase->select($sql) as $row) {
+            $balist[] = new static($row);
         }
 
         return $balist;
@@ -178,5 +170,15 @@ class BalanceCuentaA extends Base\ModelClass
     public static function tableName()
     {
         return 'balancescuentasabreviadas';
+    }
+
+    /**
+     * 
+     * @return bool
+     */
+    public function test()
+    {
+        $this->desccuenta = $this->toolBox()->utils()->noHtml($this->desccuenta);
+        return parent::test();
     }
 }

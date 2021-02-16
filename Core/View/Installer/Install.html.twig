@@ -12,8 +12,7 @@
         <link rel="shortcut icon" href="Core/Assets/Images/favicon.ico" />
         <link rel="apple-touch-icon" sizes="180x180" href="Core/Assets/Images/apple-icon-180x180.png" />
         <script type="text/javascript" src="node_modules/jquery/dist/jquery.min.js"></script>
-        <script type="text/javascript" src="node_modules/popper.js/dist/umd/popper.min.js"></script>
-        <script type="text/javascript" src="node_modules/bootstrap/dist/js/bootstrap.min.js"></script>
+        <script type="text/javascript" src="node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
         <script type="text/javascript">
             $(document).ready(function () {
                 document.fs_install.fs_timezone.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -45,7 +44,7 @@
         <nav class="navbar navbar-expand-lg navbar-light bg-light sticky-top">
             <a class="navbar-brand" href="" onclick="location.reload();">
                 <img src="Core/Assets/Images/logo.png" width="30" height="30" class="align-top" alt="FacturaScripts"/>
-                FacturaScripts 2018
+                FacturaScripts {{ version }}
             </a>
             <ul class="nav navbar-nav mr-auto"></ul>
             <ul class="navbar-nav flex-row ml-md-auto d-none d-md-flex">
@@ -61,10 +60,9 @@
                 <div class="col-sm-12">
                     <br/>
                     {% from 'Macro/Utils.html.twig' import message as show_message %}
-                    {{ show_message(log, ['error', 'critical', 'alert', 'emergency'], 'danger') }}
+                    {{ show_message(log, ['error', 'critical'], 'danger') }}
                     {{ show_message(log, ['warning'], 'warning') }}
                     {{ show_message(log, ['notice'], 'success') }}
-                    {{ show_message(log, ['info'], 'info') }}
                 </div>
             </div>
         </div>
@@ -77,7 +75,7 @@
             </div>
             <div class="row">
                 <div class="col-sm-12">
-                    <div class="card">
+                    <div class="card shadow">
                         <div class="card-header">
                             <ul class="nav nav-tabs card-header-tabs" role="tablist">
                                 <li role="presentation" class="nav-item">
@@ -104,7 +102,7 @@
                                         <div class="row">
                                             <div class="col-sm-4">
                                                 <div class="form-group">
-                                                    {{ i18n.trans('select-language') }}:
+                                                    {{ i18n.trans('language') }}:
                                                     <div class="input-group">
                                                         <span class="input-group-prepend">
                                                             <span class="input-group-text">
@@ -113,7 +111,7 @@
                                                         </span>
                                                         <select id="fs_lang" name="fs_lang" class="form-control">
                                                             {% for langCode, langName in i18n.getAvailableLanguages() %}
-                                                                {% if langCode == i18n.getLangCode() %}
+                                                                {% if langCode == i18n.getLang() %}
                                                                     <option value="{{ langCode }}" selected="">{{ langName }}</option>
                                                                 {% else %}
                                                                     <option value="{{ langCode }}">{{ langName }}</option>
@@ -125,7 +123,7 @@
                                             </div>
                                             <div class="col-sm-4">
                                                 <div class="form-group">
-                                                    {{ i18n.trans('select-timezone') }}:
+                                                    {{ i18n.trans('timezone') }}:
                                                     <div class="input-group">
                                                         <span class="input-group-prepend">
                                                             <span class="input-group-text">
@@ -134,7 +132,7 @@
                                                         </span>
                                                         <select name="fs_timezone" class="form-control">
                                                             {% for tz in timezones %}
-                                                                <option value="{{ tz['zone'] }}">{{ tz['zone'] }} - {{ tz['diff_from_GMT']}}</option>
+                                                                <option value="{{ tz }}">{{ tz }}</option>
                                                             {% endfor %}
                                                         </select>
                                                     </div>
@@ -197,7 +195,7 @@
                                                 <div class="form-group">
                                                     {{ i18n.trans('mysql-socket') }}:
                                                     <input type="text" name="mysql_socket" class="form-control" placeholder="{{ i18n.trans('optional') }}"/>
-                                                    <p class="form-text">{{ i18n.trans('mysql-socket-p') }}</p>
+                                                    <small class="form-text text-muted">{{ i18n.trans('mysql-socket-p') }}</small>
                                                 </div>
                                             </div>
                                         </div>
@@ -253,7 +251,7 @@
                         </div>
                         <div class="card-footer">
                             &COPY; 2013-{{ 'now'|date('Y')}}
-                            <a href="https://www.facturascripts.com" target="_blank">FacturaScripts</a>
+                            <a href="https://facturascripts.com" target="_blank">FacturaScripts</a>
                         </div>
                     </div>
                 </div>

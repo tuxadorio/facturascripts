@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -16,9 +16,6 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
- *
- * Initial description for the controller ListFormaPago
- *
  * @author Artex Trading sa     <jcuello@artextrading.com>
  * @author Carlos García Gómez  <carlos@facturascripts.com>
 -->
@@ -26,7 +23,7 @@
     <columns>
         <column name="company" display="none" order="90">
             <widget type="select" fieldname="idempresa">
-                <values source="empresas" fieldcode="idempresa" fieldtitle="nombrecorto"></values>
+                <values source="empresas" fieldcode="idempresa" fieldtitle="nombrecorto" />
             </widget>
         </column>
         <column name="code" order="100">
@@ -35,10 +32,10 @@
         <column name="description" order="110">
             <widget type="textarea" fieldname="descripcion" />
         </column>
-        <column name="expiration" order="120">
+        <column name="expiration" display="right" order="120">
             <widget type="number" fieldname="plazovencimiento" decimal="0" />
         </column>
-        <column name="expiration-type" numcolumns="4" order="125">
+        <column name="expiration-type" numcolumns="4" order="130">
             <widget type="select" fieldname="tipovencimiento" translate="true">
                 <values title="days">days</values>
                 <values title="weeks">weeks</values>
@@ -46,19 +43,22 @@
                 <values title="years">years</values>
             </widget>
         </column>
-        <column name="generate-receipt" display="center" order="135">
-            <widget type="select" fieldname="genrecibos" translate="true">
-                <values title="paid">Pagados</values>
-                <values title="issued">Emitidos</values>
-                <option color="green">Pagados</option>
-                <option color="brown">Emitidos</option>
-            </widget>
+        <column name="paid" display="center" order="140">
+            <widget type="checkbox" fieldname="pagado" />
         </column>
-        <column name="domicilied" display="center" order="145">
+        <column name="domiciled" display="center" order="150">
             <widget type="checkbox" fieldname="domiciliado" />
         </column>
-        <column name="print" display="center" order="155">
-            <widget type="checkbox" fieldname="imprimir" />
+        <column name="bank-account" display="right" order="160">
+            <widget type="select" fieldname="codcuentabanco" onclick="EditCuentaBanco">
+                <values source="cuentasbanco" fieldcode="codcuenta" fieldtitle="descripcion" />
+            </widget>
         </column>
     </columns>
+    <rows>
+        <row type="status">
+            <option color="success" fieldname="pagado" title="paid">1</option>
+            <option color="info" fieldname="domiciliado" title="domiciled">1</option>
+        </row>
+    </rows>
 </view>

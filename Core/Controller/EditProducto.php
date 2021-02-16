@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,7 +19,12 @@
 namespace FacturaScripts\Core\Controller;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\BaseView;
+use FacturaScripts\Core\Lib\ExtendedController\EditController;
+use FacturaScripts\Dinamic\Model\Almacen;
+use FacturaScripts\Dinamic\Model\Atributo;
+use FacturaScripts\Dinamic\Model\Producto;
+use FacturaScripts\Dinamic\Model\ProductoProveedor;
 
 /**
  * Controller to edit a single item from the EditProducto model
@@ -28,11 +33,11 @@ use FacturaScripts\Core\Lib\ExtendedController;
  * @author Artex Trading sa             <jcuello@artextrading.com>
  * @author Fco. Antonio Moreno Pérez    <famphuelva@gmail.com>
  */
-class EditProducto extends ExtendedController\EditController
+class EditProducto extends EditController
 {
 
     /**
-     * 
+     *
      * @return string
      */
     public function getModelClassName()
@@ -47,13 +52,11 @@ class EditProducto extends ExtendedController\EditController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'product';
-        $pagedata['icon'] = 'fas fa-cube';
-        $pagedata['menu'] = 'warehouse';
-        $pagedata['showonmenu'] = false;
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'warehouse';
+        $data['title'] = 'product';
+        $data['icon'] = 'fas fa-cube';
+        return $data;
     }
 
     /**
@@ -62,14 +65,119 @@ class EditProducto extends ExtendedController\EditController
     protected function createViews()
     {
         parent::createViews();
-        $this->addEditListView('EditVariante', 'Variante', 'variants', 'fas fa-code-branch');
-        $this->addEditListView('EditStock', 'Stock', 'stock', 'fas fa-tasks');
+        $this->createViewsVariants();
+        $this->createViewsStock();
+        $this->createViewsSuppliers();
     }
 
     /**
      * 
+     * @param string $viewName
      */
-    protected function loadCustomStockWidget()
+    protected function createViewsStock(string $viewName = 'EditStock')
+    {
+        $this->addEditListView($viewName, 'Stock', 'stock', 'fas fa-dolly');
+
+        $almacen = new Almacen();
+        if ($almacen->count() <= 1) {
+            $this->views[$viewName]->disableColumn('warehouse');
+        }
+    }
+
+    /**
+     *
+     * @param string $viewName
+     */
+    protected function createViewsSuppliers(string $viewName = 'ListProductoProveedor')
+    {
+        $this->addListView($viewName, 'ProductoProveedor', 'suppliers', 'fas fa-users');
+        $this->views[$viewName]->addOrderBy(['actualizado'], 'update-time', 2);
+        $this->views[$viewName]->addOrderBy(['neto'], 'net');
+
+        /// change new button settings
+        $this->setSettings($viewName, 'modalInsert', 'new-supplier');
+
+        /// disable clickable row
+        $this->setSettings($viewName, 'clickable', false);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewsVariants(string $viewName = 'EditVariante')
+    {
+        $this->addEditListView($viewName, 'Variante', 'variants', 'fas fa-project-diagram');
+
+        $attribute = new Atributo();
+        $attCount = $attribute->count();
+        if ($attCount < 4) {
+            $this->views[$viewName]->disableColumn('attribute-value-4');
+        }
+        if ($attCount < 3) {
+            $this->views[$viewName]->disableColumn('attribute-value-3');
+        }
+        if ($attCount < 2) {
+            $this->views[$viewName]->disableColumn('attribute-value-2');
+        }
+        if ($attCount < 1) {
+            $this->views[$viewName]->disableColumn('attribute-value-1');
+        }
+    }
+
+    /**
+     * Run the actions that alter data before reading it.
+     *
+     * @param string $action
+     * @return bool
+     */
+    protected function execPreviousAction($action)
+    {
+        switch ($action) {
+            case 'new-supplier':
+                return $this->newSupplierAction();
+        }
+
+        return parent::execPreviousAction($action);
+    }
+
+    /**
+     *
+     * @return bool
+     */
+    protected function insertAction()
+    {
+        if (parent::insertAction()) {
+            return true;
+        }
+
+        if ($this->active === 'EditProducto') {
+            $this->views['EditProducto']->disableColumn('reference', false, 'false');
+        }
+
+        return false;
+    }
+
+    /**
+     *
+     * @param string $viewName
+     */
+    protected function loadCustomAttributeWidgets(string $viewName)
+    {
+        $values = $this->codeModel->all('AtributoValor', 'id', '');
+        foreach (['attribute-value-1', 'attribute-value-2', 'attribute-value-3', 'attribute-value-4'] as $colName) {
+            $column = $this->views[$viewName]->columnForName($colName);
+            if ($column) {
+                $column->widget->setValuesFromCodeModel($values);
+            }
+        }
+    }
+
+    /**
+     *
+     * @param string $viewName
+     */
+    protected function loadCustomStockWidget(string $viewName)
     {
         $references = [];
         $idproducto = $this->getViewModelValue('EditProducto', 'idproducto');
@@ -78,34 +186,90 @@ class EditProducto extends ExtendedController\EditController
             $references[] = ['value' => $code->code, 'title' => $code->description];
         }
 
-        $columnReference = $this->views['EditStock']->columnForName('reference');
-        $columnReference->widget->setValuesFromArray($references, false);
+        $column = $this->views[$viewName]->columnForName('reference');
+        if ($column) {
+            $column->widget->setValuesFromArray($references, false);
+        }
     }
 
     /**
      * Load view data procedure
      *
-     * @param string                      $viewName
-     * @param ExtendedController\BaseView $view
+     * @param string   $viewName
+     * @param BaseView $view
      */
     protected function loadData($viewName, $view)
     {
+        $idproducto = $this->getViewModelValue('EditProducto', 'idproducto');
+        $where = [new DataBaseWhere('idproducto', $idproducto)];
+
         switch ($viewName) {
             case 'EditProducto':
                 parent::loadData($viewName, $view);
                 if ($view->model->nostock) {
                     $this->setSettings('EditStock', 'active', false);
                 } else {
-                    $this->loadCustomStockWidget();
+                    $this->loadCustomStockWidget('EditStock');
                 }
                 break;
 
             case 'EditVariante':
+                $view->loadData('', $where, ['idvariante' => 'DESC']);
+                $this->loadCustomAttributeWidgets($viewName);
+                break;
+
             case 'EditStock':
-                $idproducto = $this->getViewModelValue('EditProducto', 'idproducto');
-                $where = [new DataBaseWhere('idproducto', $idproducto)];
-                $view->loadData('', $where, ['referencia' => 'ASC']);
+                $view->loadData('', $where, ['idstock' => 'DESC']);
+                break;
+
+            case 'ListProductoProveedor':
+                $where2 = [
+                    new DataBaseWhere('idproducto', $idproducto),
+                    new DataBaseWhere('referencia', $this->getViewModelValue('EditProducto', 'referencia'), '=', 'OR')
+                ];
+                $view->loadData('', $where2);
                 break;
         }
+    }
+
+    /**
+     * Create a new supplier for this pruduct from the modal insert.
+     *
+     * @return bool
+     */
+    protected function newSupplierAction()
+    {
+        $code = $this->request->get('code');
+        $data = $this->request->request->all();
+
+        $product = new Producto();
+        if (empty($code) || false === $product->loadFromCode($code) || empty($data['newcodproveedor'])) {
+            return true;
+        }
+
+        /// check for duplicate record
+        $productSupplier = new ProductoProveedor();
+        $where = [
+            new DataBaseWhere('idproducto', $code),
+            new DataBaseWhere('codproveedor', $data['newcodproveedor'])
+        ];
+        if ($productSupplier->loadFromCode('', $where)) {
+            $this->toolBox()->i18nLog()->error('duplicate-record');
+            return true;
+        }
+
+        /// save data
+        $productSupplier->codproveedor = $data['newcodproveedor'];
+        $productSupplier->idproducto = $product->primaryColumnValue();
+        $productSupplier->precio = (float) $data['newprecio'];
+        $productSupplier->referencia = $product->referencia;
+        $productSupplier->refproveedor = $data['newrefproveedor'];
+        if ($productSupplier->save()) {
+            $this->toolBox()->i18nLog()->notice('record-updated-correctly');
+            return true;
+        }
+
+        $this->toolBox()->i18nLog()->error('record-save-error');
+        return true;
     }
 }

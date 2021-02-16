@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,6 +19,9 @@
 namespace FacturaScripts\Core\Model;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Dinamic\Model\Almacen as DinAlmacen;
+use FacturaScripts\Dinamic\Model\Producto as DinProducto;
+use FacturaScripts\Dinamic\Model\Variante as DinVariante;
 
 /**
  * The quantity in inventory of an item in a particular warehouse.
@@ -29,6 +32,7 @@ class Stock extends Base\ModelClass
 {
 
     use Base\ModelTrait;
+    use Base\ProductRelationTrait;
 
     const MAX_DECIMALS = 3;
 
@@ -52,13 +56,6 @@ class Stock extends Base\ModelClass
      * @var float|int
      */
     public $disponible;
-
-    /**
-     * Product identifier.
-     *
-     * @var int
-     */
-    public $idproducto;
 
     /**
      * Primary key.
@@ -109,6 +106,7 @@ class Stock extends Base\ModelClass
     {
         parent::clear();
         $this->cantidad = 0.0;
+        $this->codalmacen = $this->toolBox()->appSettings()->get('default', 'codalmacen');
         $this->disponible = 0.0;
         $this->pterecibir = 0.0;
         $this->reservada = 0.0;
@@ -124,7 +122,7 @@ class Stock extends Base\ModelClass
     {
         if (parent::delete()) {
             $this->cantidad = 0.0;
-            $this->updateProductoStock();
+            $this->updateProductStock();
             return true;
         }
 
@@ -141,9 +139,9 @@ class Stock extends Base\ModelClass
     public function install()
     {
         /// needed dependencies
-        new Almacen();
-        new Producto();
-        new Variante();
+        new DinAlmacen();
+        new DinProducto();
+        new DinVariante();
 
         return parent::install();
     }
@@ -165,7 +163,7 @@ class Stock extends Base\ModelClass
     public function save()
     {
         if (parent::save()) {
-            $this->updateProductoStock();
+            $this->updateProductStock();
             return true;
         }
 
@@ -192,8 +190,11 @@ class Stock extends Base\ModelClass
      */
     public function transferTo(string $toWarehouse, float $qty): bool
     {
-        $destination = new Stock();
-        $where = [new DataBaseWhere('codalmacen', $toWarehouse), new DataBaseWhere('referencia', $this->referencia)];
+        $destination = new static();
+        $where = [
+            new DataBaseWhere('codalmacen', $toWarehouse),
+            new DataBaseWhere('referencia', $this->referencia)
+        ];
         if ($destination->loadFromCode('', $where)) {
             $destination->cantidad += $qty;
         } else {
@@ -204,7 +205,7 @@ class Stock extends Base\ModelClass
         }
 
         $this->cantidad -= $qty;
-        return ($destination->save() && $this->save());
+        return $destination->save() && $this->save();
     }
 
     /**
@@ -214,20 +215,12 @@ class Stock extends Base\ModelClass
      */
     public function test()
     {
-        $this->cantidad = round($this->cantidad, self::MAX_DECIMALS);
-
-        $this->reservada = round($this->reservada, self::MAX_DECIMALS);
-        if ($this->reservada < 0) {
-            $this->reservada = 0;
-        }
-
-        $this->pterecibir = round($this->pterecibir, self::MAX_DECIMALS);
-        if ($this->pterecibir < 0) {
-            $this->pterecibir = 0;
-        }
+        $this->cantidad = \round($this->cantidad, self::MAX_DECIMALS);
+        $this->referencia = $this->toolBox()->utils()->noHtml($this->referencia);
+        $this->reservada = \round($this->reservada, self::MAX_DECIMALS);
+        $this->pterecibir = \round($this->pterecibir, self::MAX_DECIMALS);
 
         $this->disponible = $this->cantidad - $this->reservada;
-
         return parent::test();
     }
 
@@ -239,7 +232,7 @@ class Stock extends Base\ModelClass
      * 
      * @return float
      */
-    public function totalFromProducto(int $idproducto, string $referencia = '')
+    public function totalFromProduct(int $idproducto, string $referencia = '')
     {
         $sql = 'SELECT SUM(cantidad) AS total FROM ' . static::tableName()
             . ' WHERE idproducto = ' . self::$dataBase->var2str($idproducto);
@@ -249,11 +242,7 @@ class Stock extends Base\ModelClass
         }
 
         $data = self::$dataBase->select($sql);
-        if (!empty($data)) {
-            return round((float) $data[0]['total'], self::MAX_DECIMALS);
-        }
-
-        return 0.0;
+        return empty($data) ? 0.0 : \round((float) $data[0]['total'], self::MAX_DECIMALS);
     }
 
     /**
@@ -266,34 +255,22 @@ class Stock extends Base\ModelClass
      */
     public function url(string $type = 'auto', string $list = 'List')
     {
-        switch ($type) {
-            case 'edit':
-                return is_null($this->idproducto) ? 'EditProducto' : 'EditProducto?code=' . $this->idproducto;
-
-            case 'list':
-                return $list . 'Producto';
-
-            case 'new':
-                return 'EditProducto';
-        }
-
-        /// default
-        return empty($this->idproducto) ? $list . 'Producto' : 'EditProducto?code=' . $this->idproducto;
+        return $this->getProducto()->url($type);
     }
 
     /**
      * 
      * @return bool
      */
-    protected function updateProductoStock()
+    protected function updateProductStock()
     {
-        $total = $this->totalFromProducto($this->idproducto);
-        $sql = "UPDATE " . Producto::tableName() . " SET stockfis = " . self::$dataBase->var2str($total)
-            . ", actualizado = " . self::$dataBase->var2str(date('d-m-Y H:i:s'))
+        $total = $this->totalFromProduct($this->idproducto);
+        $sql = "UPDATE " . DinProducto::tableName() . " SET stockfis = " . self::$dataBase->var2str($total)
+            . ", actualizado = " . self::$dataBase->var2str(\date(self::DATETIME_STYLE))
             . " WHERE idproducto = " . self::$dataBase->var2str($this->idproducto) . ';';
 
-        $totalVariant = $this->totalFromProducto($this->idproducto, $this->referencia);
-        $sql .= "UPDATE " . Variante::tableName() . " SET stockfis = " . self::$dataBase->var2str($totalVariant)
+        $totalVariant = $this->totalFromProduct($this->idproducto, $this->referencia);
+        $sql .= "UPDATE " . DinVariante::tableName() . " SET stockfis = " . self::$dataBase->var2str($totalVariant)
             . " WHERE referencia = " . self::$dataBase->var2str($this->referencia) . ';';
 
         return self::$dataBase->exec($sql);

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,19 +18,23 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Core\Lib\ExtendedController\BaseView;
+use FacturaScripts\Core\Lib\ExtendedController\EditController;
 
 /**
  * Controller to edit a single item from the Pais model
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Artex Trading sa <jcuello@artextrading.com>
+ * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Artex Trading sa     <jcuello@artextrading.com>
  */
-class EditPais extends ExtendedController\EditController
+class EditPais extends EditController
 {
 
     /**
-     * Returns the model name
+     * Returns the model name.
+     * 
+     * @return string
      */
     public function getModelClassName()
     {
@@ -38,18 +42,60 @@ class EditPais extends ExtendedController\EditController
     }
 
     /**
-     * Returns basic page attributes
+     * Returns basic page attributes.
      *
      * @return array
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'country';
-        $pagedata['menu'] = 'admin';
-        $pagedata['icon'] = 'fas fa-globe-americas';
-        $pagedata['showonmenu'] = false;
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['title'] = 'country';
+        $data['icon'] = 'fas fa-globe-americas';
+        return $data;
+    }
 
-        return $pagedata;
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createProvinceView($viewName = 'ListProvincia')
+    {
+        $this->addListView($viewName, 'Provincia', 'provinces');
+        $this->views[$viewName]->addOrderBy(['provincia'], 'name', 1);
+        $this->views[$viewName]->searchFields = ['provincia'];
+
+        /// disable column
+        $this->views[$viewName]->disableColumn('country');
+    }
+
+    /**
+     * Create tabs or views.
+     */
+    protected function createViews()
+    {
+        parent::createViews();
+        $this->setTabsPosition('bottom');
+
+        $this->createProvinceView();
+    }
+
+    /**
+     * 
+     * @param string   $viewName
+     * @param BaseView $view
+     */
+    protected function loadData($viewName, $view)
+    {
+        switch ($viewName) {
+            case 'ListProvincia':
+                $codpais = $this->getViewModelValue($this->getMainViewName(), 'codpais');
+                $where = [new DataBaseWhere('codpais', $codpais)];
+                $view->loadData('', $where);
+                break;
+
+            default:
+                parent::loadData($viewName, $view);
+        }
     }
 }

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2019-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -31,7 +31,7 @@ abstract class ModelOnChangeClass extends ModelClass
      *
      * @var array
      */
-    protected $previousData;
+    protected $previousData = [];
 
     /**
      * Class constructor.
@@ -62,15 +62,15 @@ abstract class ModelOnChangeClass extends ModelClass
     /**
      * Loads a record from database.
      * 
-     * @param string $cod
+     * @param string $code
      * @param array  $where
      * @param array  $orderby
      * 
      * @return bool
      */
-    public function loadFromCode($cod, array $where = [], array $orderby = [])
+    public function loadFromCode($code, array $where = [], array $orderby = [])
     {
-        if (parent::loadFromCode($cod, $where, $orderby)) {
+        if (parent::loadFromCode($code, $where, $orderby)) {
             $this->setPreviousData();
             return true;
         }
@@ -87,6 +87,10 @@ abstract class ModelOnChangeClass extends ModelClass
      */
     protected function onChange($field)
     {
+        if ($this->pipe('onChange', $field) === false) {
+            return false;
+        }
+
         return true;
     }
 
@@ -95,15 +99,23 @@ abstract class ModelOnChangeClass extends ModelClass
      */
     protected function onDelete()
     {
-        ;
+        $this->pipe('onDelete');
     }
 
     /**
-     * This methos is called after a new record is saved on the database (saveInsert).
+     * This method is called after a new record is saved on the database (saveInsert).
      */
     protected function onInsert()
     {
-        ;
+        $this->pipe('onInsert');
+    }
+
+    /**
+     * This method is called after a record is updated on the database (saveUpdate).
+     */
+    protected function onUpdate()
+    {
+        $this->pipe('onUpdate');
     }
 
     /**
@@ -133,13 +145,14 @@ abstract class ModelOnChangeClass extends ModelClass
      */
     protected function saveUpdate(array $values = [])
     {
-        foreach (array_keys($this->previousData) as $field) {
+        foreach (\array_keys($this->previousData) as $field) {
             if ($this->{$field} != $this->previousData[$field] && !$this->onChange($field)) {
                 return false;
             }
         }
 
         if (parent::saveUpdate($values)) {
+            $this->onUpdate();
             $this->setPreviousData();
             return true;
         }
@@ -154,8 +167,15 @@ abstract class ModelOnChangeClass extends ModelClass
      */
     protected function setPreviousData(array $fields = [])
     {
+        $more = $this->pipe('setPreviousDataMore');
+        if (\is_array($more)) {
+            foreach ($more as $key) {
+                $fields[] = $key;
+            }
+        }
+
         foreach ($fields as $field) {
-            $this->previousData[$field] = $this->{$field};
+            $this->previousData[$field] = isset($this->{$field}) ? $this->{$field} : null;
         }
     }
 }

@@ -18,13 +18,12 @@
     </column>
     <column>
         <name>hour</name>
-        <type>time without time zone</type>
+        <type>time</type>
     </column>
     <column>
         <name>idfile</name>
         <type>serial</type>
         <null>NO</null>
-        <default>nextval('attached_files_idfile_seq'::regclass)</default>
     </column>
     <column>
         <name>mimetype</name>

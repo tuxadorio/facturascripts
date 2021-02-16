@@ -29,7 +29,7 @@
         </column>
         <column name="company" display="none" order="115">
             <widget type="select" fieldname="idempresa">
-                <values source="empresas" fieldcode="idempresa" fieldtitle="nombrecorto"></values>
+                <values source="empresas" fieldcode="idempresa" fieldtitle="nombrecorto" />
             </widget>
         </column>
         <column name="start-date" display="center" order="120">
@@ -47,8 +47,13 @@
                 <option color="warning">CERRADO</option>
             </widget>
         </column>
-        <column name="account-length" display="right" order="160">
+        <column name="account-length" display="none" order="160">
             <widget type="number" fieldname="longsubcuenta" decimal="0" />
         </column>
     </columns>
+    <rows>
+        <row type="status">
+            <option color="warning" fieldname="estado">CERRADO</option>
+        </row>
+    </rows>
 </view>

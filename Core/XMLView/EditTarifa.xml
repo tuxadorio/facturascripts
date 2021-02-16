@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -16,33 +16,36 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
- *
- * Initial description for the controller EditTarifa
- *
  * @author @jhonsmall           <juancarloschico0@gmail.com>
  * @author Carlos garcía Gómez  <carlos@facturascripts.com>
 -->
 <view>
     <columns>
-        <group name="data" numcolumns="12" title="rates">
-            <column name="codtarifa" title="code" numcolumns="3" order="100">
-                <widget type="text" fieldname="codtarifa" icon="fas fa-hashtag" maxlength="6" required="true" />
+        <group name="data" numcolumns="12">
+            <column name="code" description="optional" display="none" order="100">
+                <widget type="text" fieldname="codtarifa" icon="fas fa-hashtag" maxlength="6" readonly="dinamic" />
             </column>
-            <column name="nombre" title="name" numcolumns="6" order="110">
-                <widget type="text" fieldname="nombre" required="true" />
+            <column name="name" order="110">
+                <widget type="text" fieldname="nombre" required="true" maxlength="50" />
             </column>
-            <column name="aplicar" title="formula-to-apply" numcolumns="3" order="120">
-                <widget type="select" fieldname="aplicar" translate="true">
+            <column name="formula" title="formula-to-apply" order="120">
+                <widget type="select" fieldname="aplicar" translate="true" required="true">
                     <values title="formula-sale-price">pvp</values>
                     <values title="formula-cost-price">coste</values>
                 </widget>
             </column>
+            <column name="value-x" order="130">
+                <widget type="number" fieldname="valorx" icon="fas fa-percentage" />
+            </column>
+            <column name="value-y" order="140">
+                <widget type="money" fieldname="valory" />
+            </column>
         </group>
         <group name="check" numcolumns="12">
-            <column name="mincoste" title="dont-sell-below-cost" numcolumns="4" order="130">
+            <column name="mincoste" title="dont-sell-below-cost" numcolumns="4" order="100">
                 <widget type="checkbox" fieldname="mincoste" />
             </column>
-            <column name="maxpvp" title="dont-sell-above-pvp" numcolumns="4" order="140">
+            <column name="maxpvp" title="dont-sell-above-pvp" numcolumns="4" order="110">
                 <widget type="checkbox" fieldname="maxpvp" />
             </column>
         </group>

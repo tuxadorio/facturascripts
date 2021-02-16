@@ -1,8 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017       Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
- * Copyright (C) 2017-2018  Carlos Garcia Gomez     <carlos@facturascripts.com>
+ * Copyright (C) 2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -20,18 +19,67 @@
 namespace FacturaScripts\Test\Core\Model;
 
 use FacturaScripts\Core\Model\CuentaBancoProveedor;
+use FacturaScripts\Core\Model\Proveedor;
 use FacturaScripts\Test\Core\CustomTest;
 
 /**
- * @covers \CuentaBancoProveedor
+ * Description of CuentaBancoProveedorTest
  *
- * @author Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
+ * @author Carlos Garcia Gomez <carlos@facturascripts.com>
+ * @covers \FacturaScripts\Core\Model\CuentaBancoProveedor
  */
-final class CuentaBancoProveedorTest extends CustomTest
+class CuentaBancoProveedorTest extends CustomTest
 {
 
     protected function setUp()
     {
         $this->model = new CuentaBancoProveedor();
+    }
+
+    public function testSaveInsert()
+    {
+        /// save supplier
+        $supplier = new Proveedor();
+        $supplier->cifnif = '1234';
+        $supplier->nombre = 'Test';
+        $this->assertTrue($supplier->save());
+
+        /// save bank account
+        $account = new CuentaBancoProveedor();
+        $account->codproveedor = $supplier->primaryColumnValue();
+        $account->descripcion = 'test';
+        $this->assertTrue($account->save());
+
+        /// delete bank account
+        $this->assertTrue($account->delete());
+
+        /// delete supplier
+        $this->assertTrue($supplier->delete());
+    }
+
+    public function testIBAN()
+    {
+        /// save supplier
+        $supplier = new Proveedor();
+        $supplier->cifnif = '1234';
+        $supplier->nombre = 'Test';
+        $this->assertTrue($supplier->save());
+
+        /// save valid iban
+        $account = new CuentaBancoProveedor();
+        $account->codproveedor = $supplier->primaryColumnValue();
+        $account->descripcion = 'test';
+        $account->iban = 'ES91 2100 0418 4502 0005 1332';
+        $this->assertTrue($account->save());
+
+        /// now save invalid iban
+        $account->iban = '1234';
+        $this->assertFalse($account->save());
+
+        /// delete bank account
+        $this->assertTrue($account->delete());
+
+        /// delete supplier
+        $this->assertTrue($supplier->delete());
     }
 }

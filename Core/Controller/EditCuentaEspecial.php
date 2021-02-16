@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,18 +18,23 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Core\Lib\ExtendedController\BaseView;
+use FacturaScripts\Core\Lib\ExtendedController\EditController;
 
 /**
  * Controller to edit a single item from the CuentaEspecial model
  *
- * @author Artex Trading sa <jferrer@artextrading.com>
+ * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Artex Trading sa     <jferrer@artextrading.com>
  */
-class EditCuentaEspecial extends ExtendedController\EditController
+class EditCuentaEspecial extends EditController
 {
 
     /**
-     * Returns the model name
+     * Returns the model name.
+     * 
+     * @return string
      */
     public function getModelClassName()
     {
@@ -37,18 +42,89 @@ class EditCuentaEspecial extends ExtendedController\EditController
     }
 
     /**
-     * Returns basic page attributes
+     * Returns basic page attributes.
      *
      * @return array
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'special-account';
-        $pagedata['icon'] = 'fas fa-newspaper';
-        $pagedata['menu'] = 'accounting';
-        $pagedata['showonmenu'] = false;
+        $data = parent::getPageData();
+        $data['menu'] = 'accounting';
+        $data['title'] = 'special-account';
+        $data['icon'] = 'fas fa-newspaper';
+        return $data;
+    }
 
-        return $pagedata;
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createAccountsView(string $viewName = 'ListCuenta')
+    {
+        $this->addListView($viewName, 'Cuenta', 'accounts', 'fas fa-book');
+        $this->views[$viewName]->addOrderBy(['codejercicio'], 'exercise', 2);
+
+        /// disable columns
+        $this->views[$viewName]->disableColumn('special-account');
+
+        /// disable buttons
+        $this->setSettings($viewName, 'btnDelete', false);
+        $this->setSettings($viewName, 'btnNew', false);
+        $this->setSettings($viewName, 'checkBoxes', false);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createSubaccountsView(string $viewName = 'ListSubcuenta')
+    {
+        $this->addListView($viewName, 'Subcuenta', 'subaccounts', 'fas fa-th-list');
+        $this->views[$viewName]->addOrderBy(['codejercicio'], 'exercise', 2);
+
+        /// disable columns
+        $this->views[$viewName]->disableColumn('special-account');
+
+        /// disable buttons
+        $this->setSettings($viewName, 'btnDelete', false);
+        $this->setSettings($viewName, 'btnNew', false);
+        $this->setSettings($viewName, 'checkBoxes', false);
+    }
+
+    /**
+     * Create tabs or views.
+     */
+    protected function createViews()
+    {
+        parent::createViews();
+
+        /// disable buttons
+        $mainViewName = $this->getMainViewName();
+        $this->setSettings($mainViewName, 'btnDelete', false);
+        $this->setSettings($mainViewName, 'btnNew', false);
+
+        $this->setTabsPosition('bottom');
+        $this->createAccountsView();
+        $this->createSubaccountsView();
+    }
+
+    /**
+     * 
+     * @param string   $viewName
+     * @param BaseView $view
+     */
+    protected function loadData($viewName, $view)
+    {
+        switch ($viewName) {
+            case 'ListCuenta':
+            case 'ListSubcuenta':
+                $codcuentaesp = $this->getViewModelValue('EditCuentaEspecial', 'codcuentaesp');
+                $where = [new DataBaseWhere('codcuentaesp', $codcuentaesp)];
+                $view->loadData('', $where);
+                break;
+
+            default:
+                parent::loadData($viewName, $view);
+        }
     }
 }

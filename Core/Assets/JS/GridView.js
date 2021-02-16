@@ -1,6 +1,6 @@
 /*
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -22,6 +22,7 @@
 
 var documentUrl = location.href;
 var documentLineData = [];
+var documentReadOnly = false;
 var gridObject = null;               // TODO: convert to POO
 var autocompleteColumns = [];
 var eventManager = {};
@@ -90,9 +91,10 @@ function configureAutocompleteColumns(columns) {
  * the order index of the lines.
  *
  * @param {string} fieldOrder
+ * @param {boolean} onlyWithData
  * @returns {Array}
  */
-function getGridData(fieldOrder = null) {
+function getGridData(fieldOrder = null, onlyWithData = false) {
     var rowIndex, lines = [];
     for (var i = 0, max = documentLineData.rows.length; i < max; i++) {
         rowIndex = gridObject.toVisualRow(i);
@@ -102,7 +104,11 @@ function getGridData(fieldOrder = null) {
         if (fieldOrder !== null) {
             documentLineData.rows[i][fieldOrder] = rowIndex;
         }
-        lines.push(documentLineData.rows[i]);
+        if (onlyWithData) {
+            lines.push(documentLineData.rows[i]);
+        } else {
+            lines[rowIndex] = documentLineData.rows[i];
+        }
     }
     return lines;
 }
@@ -160,6 +166,11 @@ function getColumnSelected() {
         return cellSelected.column;
     }
     return selected.length > 0 ? gridObject.getSelected()[0][1] : null;
+}
+
+/* Set Read Only to Grid View */
+function setReadOnly(value) {
+    gridObject.updateSettings({readOnly: value});
 }
 
 /*
@@ -231,7 +242,7 @@ function saveDocument(mainFormName) {
     try {
         var data = {
             action: "save-document",
-            lines: getGridData("order"),
+            lines: getGridData("sortnum", true),
             document: {}
         };
         var mainForm = $("#" + mainFormName);
@@ -272,6 +283,7 @@ $(document).ready(function () {
 
         // Create Grid Object
         gridObject = new Handsontable(container, {
+            readOnly: documentReadOnly,
             autoWrapRow: true,
             contextMenu: true,
             colHeaders: documentLineData.headers,
@@ -290,7 +302,12 @@ $(document).ready(function () {
             rowHeaders: true,
             stretchH: 'all'
         });
+
         Handsontable.hooks.add("afterSelection", eventAfterSelection);
         Handsontable.hooks.add("beforeChange", eventBeforeChange);
+
+        $("#mainTabs li:first-child a").on('shown.bs.tab', function (e) {
+            gridObject.render();
+        });
     }
 });

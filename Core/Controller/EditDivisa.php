@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,18 +18,21 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\EditController;
 
 /**
  * Controller to edit a single item from the Divisa model
  *
- * @author Raúl Jiménez <comercial@nazcanetworks.com>
+ * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Raúl Jiménez         <comercial@nazcanetworks.com>
  */
-class EditDivisa extends ExtendedController\EditController
+class EditDivisa extends EditController
 {
 
     /**
-     * Returns the model name
+     * Returns the model name.
+     * 
+     * @return string
      */
     public function getModelClassName()
     {
@@ -37,18 +40,16 @@ class EditDivisa extends ExtendedController\EditController
     }
 
     /**
-     * Returns basic page attributes
+     * Returns basic page attributes.
      *
      * @return array
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'currency';
-        $pagedata['menu'] = 'admin';
-        $pagedata['icon'] = 'fas fa-money-bill-alt';
-        $pagedata['showonmenu'] = false;
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['title'] = 'currency';
+        $data['icon'] = 'fas fa-money-bill-alt';
+        return $data;
     }
 }

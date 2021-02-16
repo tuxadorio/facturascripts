@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,8 +18,10 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Base;
-use FacturaScripts\Core\Model;
+use FacturaScripts\Core\Base\Controller;
+use FacturaScripts\Core\Base\ControllerPermissions;
+use FacturaScripts\Dinamic\Model\Page;
+use FacturaScripts\Dinamic\Model\User;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -27,7 +29,7 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * @author Carlos García Gómez <carlos@facturascripts.com>
  */
-class MegaSearch extends Base\Controller
+class MegaSearch extends Controller
 {
 
     /**
@@ -59,19 +61,17 @@ class MegaSearch extends Base\Controller
      */
     public function getPageData()
     {
-        $pageData = parent::getPageData();
-        $pageData['menu'] = 'reports';
-        $pageData['showonmenu'] = false;
-
-        return $pageData;
+        $data = parent::getPageData();
+        $data['showonmenu'] = false;
+        return $data;
     }
 
     /**
      * Runs the controller's private logic.
      *
-     * @param Response                   $response
-     * @param Model\User                 $user
-     * @param Base\ControllerPermissions $permissions
+     * @param Response              $response
+     * @param User                  $user
+     * @param ControllerPermissions $permissions
      */
     public function privateCore(&$response, $user, $permissions)
     {
@@ -80,7 +80,7 @@ class MegaSearch extends Base\Controller
         $this->sections = [];
 
         $query = $this->request->request->get('query', '');
-        $this->query = Base\Utils::noHtml(mb_strtolower($query, 'UTF8'));
+        $this->query = $this->toolBox()->utils()->noHtml(\mb_strtolower($query, 'UTF8'));
         if ($this->query !== '') {
             $this->search();
         }
@@ -92,26 +92,27 @@ class MegaSearch extends Base\Controller
     protected function pageSearch()
     {
         $results = [];
-        $pageModel = new Model\Page();
-        foreach ($pageModel->all([], [], 0, 500) as $page) {
+        $pageModel = new Page();
+        $i18n = $this->toolBox()->i18n();
+        foreach ($pageModel->all([], [], 0, 0) as $page) {
             if (!$page->showonmenu) {
                 continue;
             }
 
             /// Does the page title coincide with the search $query?
-            $translation = mb_strtolower($this->i18n->trans($page->title), 'UTF8');
-            if (stripos($page->title, $this->query) !== false || stripos($translation, $this->query) !== false) {
+            $translation = \mb_strtolower($i18n->trans($page->title), 'UTF8');
+            if (\stripos($page->title, $this->query) !== false || \stripos($translation, $this->query) !== false) {
                 $results[] = [
                     'icon' => $page->icon,
                     'link' => $page->url(),
-                    'menu' => $this->i18n->trans($page->menu),
-                    'submenu' => $this->i18n->trans($page->submenu),
-                    'title' => $this->i18n->trans($page->title),
+                    'menu' => $i18n->trans($page->menu),
+                    'submenu' => $i18n->trans($page->submenu),
+                    'title' => $i18n->trans($page->title)
                 ];
             }
 
             /// Is it a ListController that could return more results?
-            if (strpos($page->name, 'List') === 0) {
+            if (\strpos($page->name, 'List') === 0) {
                 $this->sections[$page->name] = $page->url() . '?action=megasearch&query=' . $this->query;
             }
         }
@@ -121,7 +122,7 @@ class MegaSearch extends Base\Controller
                 'columns' => ['icon' => 'icon', 'menu' => 'menu', 'submenu' => 'submenu', 'title' => 'title'],
                 'icon' => 'fas fa-mouse-pointer',
                 'title' => 'pages',
-                'results' => $results,
+                'results' => $results
             ];
         }
     }

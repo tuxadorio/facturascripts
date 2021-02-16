@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,16 +19,16 @@
 namespace FacturaScripts\Core\Controller;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\ListController;
 use FacturaScripts\Core\Model\Ejercicio;
 
 /**
  * Controller to list the items in the Ejercicio model
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Artex Trading sa <jcuello@artextrading.com>
+ * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Artex Trading sa     <jcuello@artextrading.com>
  */
-class ListEjercicio extends ExtendedController\ListController
+class ListEjercicio extends ListController
 {
 
     /**
@@ -38,12 +38,11 @@ class ListEjercicio extends ExtendedController\ListController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'exercises';
-        $pagedata['icon'] = 'fas fa-calendar-alt';
-        $pagedata['menu'] = 'accounting';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'accounting';
+        $data['title'] = 'exercises';
+        $data['icon'] = 'fas fa-calendar-alt';
+        return $data;
     }
 
     /**
@@ -51,21 +50,23 @@ class ListEjercicio extends ExtendedController\ListController
      */
     protected function createViews()
     {
-        $this->addView('ListEjercicio', 'Ejercicio', 'exercises', 'fas fa-calendar-alt');
-        $this->addSearchFields('ListEjercicio', ['nombre', 'codejercicio']);
-        $this->addOrderBy('ListEjercicio', ['fechainicio'], 'start-date', 2);
-        $this->addOrderBy('ListEjercicio', ['codejercicio'], 'code');
-        $this->addOrderBy('ListEjercicio', ['nombre'], 'name');
-        $this->addOrderBy('ListEjercicio', ['idempresa, codejercicio'], 'company');
+        $viewName = 'ListEjercicio';
+        $this->addView($viewName, 'Ejercicio', 'exercises', 'fas fa-calendar-alt');
+        $this->addSearchFields($viewName, ['nombre', 'codejercicio']);
+        $this->addOrderBy($viewName, ['fechainicio'], 'start-date', 2);
+        $this->addOrderBy($viewName, ['codejercicio'], 'code');
+        $this->addOrderBy($viewName, ['nombre'], 'name');
+        $this->addOrderBy($viewName, ['idempresa, codejercicio'], 'company');
 
+        /// filters
         $selectValues = $this->codeModel->all('empresas', 'idempresa', 'nombre');
-        $this->addFilterSelect('ListEjercicio', 'idempresa', 'company', 'idempresa', $selectValues);
+        $this->addFilterSelect($viewName, 'idempresa', 'company', 'idempresa', $selectValues);
 
         $values = [
-            ['label' => $this->i18n->trans('only-active'), 'where' => [new DataBaseWhere('estado', Ejercicio::EXERCISE_STATUS_OPEN)]],
-            ['label' => $this->i18n->trans('only-closed'), 'where' => [new DataBaseWhere('estado', Ejercicio::EXERCISE_STATUS_CLOSED)]],
-            ['label' => $this->i18n->trans('all'), 'where' => []]
+            ['label' => $this->toolBox()->i18n()->trans('all'), 'where' => []],
+            ['label' => $this->toolBox()->i18n()->trans('only-active'), 'where' => [new DataBaseWhere('estado', Ejercicio::EXERCISE_STATUS_OPEN)]],
+            ['label' => $this->toolBox()->i18n()->trans('only-closed'), 'where' => [new DataBaseWhere('estado', Ejercicio::EXERCISE_STATUS_CLOSED)]],
         ];
-        $this->addFilterSelectWhere('ListEjercicio', 'status', $values);
+        $this->addFilterSelectWhere($viewName, 'status', $values);
     }
 }

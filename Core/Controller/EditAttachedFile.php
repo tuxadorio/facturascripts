@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018  Carlos Garcia Gomez  <carlos@facturascripts.com>
+ * Copyright (C) 2018-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,18 +18,23 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Core\Lib\ExtendedController\BaseView;
+use FacturaScripts\Core\Lib\ExtendedController\EditController;
 
 /**
  * Controller to edit a single item from the AttachedFile model
  *
- * @author Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
+ * @author Carlos García Gómez      <carlos@facturascripts.com>
+ * @author Francesc Pineda Segarra  <francesc.pineda.segarra@gmail.com>
  */
-class EditAttachedFile extends ExtendedController\EditController
+class EditAttachedFile extends EditController
 {
 
     /**
-     * Returns the model name
+     * Returns the model name.
+     * 
+     * @return string
      */
     public function getModelClassName()
     {
@@ -37,18 +42,65 @@ class EditAttachedFile extends ExtendedController\EditController
     }
 
     /**
-     * Returns basic page attributes
+     * Returns basic page attributes.
      *
      * @return array
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'attached-file';
-        $pagedata['menu'] = 'admin';
-        $pagedata['icon'] = 'fas fa-paperclip';
-        $pagedata['showonmenu'] = false;
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['title'] = 'attached-file';
+        $data['icon'] = 'fas fa-paperclip';
+        return $data;
+    }
 
-        return $pagedata;
+    protected function createViews()
+    {
+        parent::createViews();
+        $this->setTabsPosition('bottom');
+
+        $this->createViewsPreview();
+        $this->createViewsRelations();
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewsPreview(string $viewName = 'preview')
+    {
+        $this->addHtmlView($viewName, 'Tab/AttachedFilePreview', 'AttachedFile', 'file', 'fas fa-eye');
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewsRelations(string $viewName = 'ListAttachedFileRelation')
+    {
+        $this->addListView($viewName, 'AttachedFileRelation', 'related', 'fas fa-copy');
+        $this->views[$viewName]->addSearchFields(['observations']);
+        $this->views[$viewName]->addOrderBy(['creationdate'], 'date', 2);
+    }
+
+    /**
+     * 
+     * @param string   $viewName
+     * @param BaseView $view
+     */
+    protected function loadData($viewName, $view)
+    {
+        switch ($viewName) {
+            case 'ListAttachedFileRelation':
+                $idfile = $this->getViewModelValue($this->getMainViewName(), 'idfile');
+                $where = [new DataBaseWhere('idfile', $idfile)];
+                $view->loadData('', $where);
+                break;
+
+            default:
+                parent::loadData($viewName, $view);
+                break;
+        }
     }
 }

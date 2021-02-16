@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2015-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2015-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,9 +18,11 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\App\AppSettings;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Dinamic\Model\Agente as DinAgente;
+use FacturaScripts\Dinamic\Model\Cliente as DinCliente;
+use FacturaScripts\Dinamic\Model\Pais as DinPais;
+use FacturaScripts\Dinamic\Model\Proveedor as DinProveedor;
 
 /**
  * Description of crm_contacto
@@ -31,6 +33,14 @@ class Contacto extends Base\Contact
 {
 
     use Base\ModelTrait;
+    use Base\PasswordTrait;
+
+    /**
+     * True if contact accepts the privacy policy.
+     *
+     * @var bool
+     */
+    public $aceptaprivacidad;
 
     /**
      * True if it supports marketing, but False.
@@ -124,6 +134,12 @@ class Contacto extends Base\Contact
     public $empresa;
 
     /**
+     *
+     * @var bool
+     */
+    public $habilitado;
+
+    /**
      * Primary key.
      *
      * @var int
@@ -159,13 +175,6 @@ class Contacto extends Base\Contact
     public $logkey;
 
     /**
-     * Password hashed with password_hash()
-     *
-     * @var string
-     */
-    public $password;
-
-    /**
      * Contact province.
      *
      * @var string
@@ -192,15 +201,15 @@ class Contacto extends Base\Contact
      */
     public function alias()
     {
-        if (empty($this->email) || strpos($this->email, '@') === false) {
+        if (empty($this->email) || \strpos($this->email, '@') === false) {
             return (string) $this->idcontacto;
         }
 
-        $aux = explode('@', $this->email);
+        $aux = \explode('@', $this->email);
         switch ($aux[0]) {
             case 'admin':
             case 'info':
-                $domain = explode('.', $aux[1]);
+                $domain = \explode('.', $aux[1]);
                 return $domain[0] . '_' . $this->idcontacto;
 
             default:
@@ -214,8 +223,10 @@ class Contacto extends Base\Contact
     public function clear()
     {
         parent::clear();
+        $this->aceptaprivacidad = false;
         $this->admitemarketing = false;
-        $this->codpais = AppSettings::get('default', 'codpais');
+        $this->codpais = $this->toolBox()->appSettings()->get('default', 'codpais');
+        $this->habilitado = true;
         $this->level = 1;
         $this->puntos = 0;
         $this->verificado = false;
@@ -227,10 +238,10 @@ class Contacto extends Base\Contact
      */
     public function country()
     {
-        $country = new Pais();
+        $country = new DinPais();
         $where = [new DataBaseWhere('codiso', $this->codpais)];
         if ($country->loadFromCode($this->codpais) || $country->loadFromCode('', $where)) {
-            return Utils::fixHtml($country->nombre);
+            return $this->toolBox()->utils()->fixHtml($country->nombre);
         }
 
         return $this->codpais;
@@ -248,31 +259,35 @@ class Contacto extends Base\Contact
 
     /**
      * 
-     * @return Cliente
+     * @param bool $create
+     *
+     * @return DinCliente
      */
-    public function getCustomer()
+    public function getCustomer($create = true)
     {
-        $cliente = new Cliente();
+        $cliente = new DinCliente();
         if ($this->codcliente && $cliente->loadFromCode($this->codcliente)) {
             return $cliente;
         }
 
-        /// creates a new customer
-        $cliente->idcontactoenv = $this->idcontacto;
-        $cliente->idcontactofact = $this->idcontacto;
-        $cliente->cifnif = $this->cifnif;
-        $cliente->codproveedor = $this->codproveedor;
-        $cliente->email = $this->email;
-        $cliente->fax = $this->fax;
-        $cliente->nombre = $this->fullName();
-        $cliente->observaciones = $this->observaciones;
-        $cliente->personafisica = $this->personafisica;
-        $cliente->razonsocial = empty($this->empresa) ? $this->fullName() : $this->empresa;
-        $cliente->telefono1 = $this->telefono1;
-        $cliente->telefono2 = $this->telefono2;
-        if ($cliente->save()) {
-            $this->codcliente = $cliente->codcliente;
-            $this->save();
+        if ($create) {
+            /// creates a new customer
+            $cliente->cifnif = $this->cifnif ?? '';
+            $cliente->codproveedor = $this->codproveedor;
+            $cliente->email = $this->email;
+            $cliente->fax = $this->fax;
+            $cliente->idcontactoenv = $this->idcontacto;
+            $cliente->idcontactofact = $this->idcontacto;
+            $cliente->nombre = $this->fullName();
+            $cliente->observaciones = $this->observaciones;
+            $cliente->personafisica = $this->personafisica;
+            $cliente->razonsocial = empty($this->empresa) ? $this->fullName() : $this->empresa;
+            $cliente->telefono1 = $this->telefono1;
+            $cliente->telefono2 = $this->telefono2;
+            if ($cliente->save()) {
+                $this->codcliente = $cliente->codcliente;
+                $this->save();
+            }
         }
 
         return $cliente;
@@ -280,29 +295,34 @@ class Contacto extends Base\Contact
 
     /**
      * 
-     * @return Proveedor
+     * @param bool $create
+     *
+     * @return DinProveedor
      */
-    public function getSupplier()
+    public function getSupplier($create = true)
     {
-        $proveedor = new Proveedor();
+        $proveedor = new DinProveedor();
         if ($this->codproveedor && $proveedor->loadFromCode($this->codproveedor)) {
             return $proveedor;
         }
 
-        /// creates a new supplier
-        $proveedor->cifnif = $this->cifnif;
-        $proveedor->codcliente = $this->codcliente;
-        $proveedor->email = $this->email;
-        $proveedor->fax = $this->fax;
-        $proveedor->nombre = $this->fullName();
-        $proveedor->observaciones = $this->observaciones;
-        $proveedor->personafisica = $this->personafisica;
-        $proveedor->razonsocial = empty($this->empresa) ? $this->fullName() : $this->empresa;
-        $proveedor->telefono1 = $this->telefono1;
-        $proveedor->telefono2 = $this->telefono2;
-        if ($proveedor->save()) {
-            $this->codproveedor = $proveedor->codproveedor;
-            $this->save();
+        if ($create) {
+            /// creates a new supplier
+            $proveedor->cifnif = $this->cifnif ?? '';
+            $proveedor->codcliente = $this->codcliente;
+            $proveedor->email = $this->email;
+            $proveedor->fax = $this->fax;
+            $proveedor->idcontacto = $this->idcontacto;
+            $proveedor->nombre = $this->fullName();
+            $proveedor->observaciones = $this->observaciones;
+            $proveedor->personafisica = $this->personafisica;
+            $proveedor->razonsocial = empty($this->empresa) ? $this->fullName() : $this->empresa;
+            $proveedor->telefono1 = $this->telefono1;
+            $proveedor->telefono2 = $this->telefono2;
+            if ($proveedor->save()) {
+                $this->codproveedor = $proveedor->codproveedor;
+                $this->save();
+            }
         }
 
         return $proveedor;
@@ -318,8 +338,9 @@ class Contacto extends Base\Contact
     public function install()
     {
         /// we need this models to be checked before
-        new Cliente();
-        new Proveedor();
+        new DinAgente();
+        new DinCliente();
+        new DinProveedor();
 
         return parent::install();
     }
@@ -334,10 +355,9 @@ class Contacto extends Base\Contact
      */
     public function newLogkey($ipAddress)
     {
-        $this->lastactivity = date('d-m-Y H:i:s');
+        $this->lastactivity = \date(self::DATETIME_STYLE);
         $this->lastip = $ipAddress;
-        $this->logkey = Utils::randomString(99);
-
+        $this->logkey = $this->toolBox()->utils()->randomString(99);
         return $this->logkey;
     }
 
@@ -362,16 +382,6 @@ class Contacto extends Base\Contact
     }
 
     /**
-     * Asigns the new password to the contact.
-     *
-     * @param string $pass
-     */
-    public function setPassword(string $pass)
-    {
-        $this->password = password_hash($pass, PASSWORD_DEFAULT);
-    }
-
-    /**
      * Returns the name of the table that uses this model.
      *
      * @return string
@@ -389,18 +399,23 @@ class Contacto extends Base\Contact
     public function test()
     {
         if (empty($this->descripcion)) {
-            $this->descripcion = $this->direccion ?? $this->fullName();
+            $this->descripcion = empty($this->codcliente) ? $this->fullName() : $this->direccion;
         }
 
-        $this->descripcion = Utils::noHtml($this->descripcion);
-        $this->apellidos = Utils::noHtml($this->apellidos);
-        $this->cargo = Utils::noHtml($this->cargo);
-        $this->ciudad = Utils::noHtml($this->ciudad);
-        $this->direccion = Utils::noHtml($this->direccion);
-        $this->empresa = Utils::noHtml($this->empresa);
-        $this->provincia = Utils::noHtml($this->provincia);
+        if (empty($this->nombre)) {
+            $this->nombre = $this->descripcion;
+        }
 
-        return parent::test();
+        $utils = $this->toolBox()->utils();
+        $this->descripcion = $utils->noHtml($this->descripcion);
+        $this->apellidos = $utils->noHtml($this->apellidos);
+        $this->cargo = $utils->noHtml($this->cargo);
+        $this->ciudad = $utils->noHtml($this->ciudad);
+        $this->direccion = $utils->noHtml($this->direccion);
+        $this->empresa = $utils->noHtml($this->empresa);
+        $this->provincia = $utils->noHtml($this->provincia);
+
+        return $this->testPassword() && parent::test();
     }
 
     /**
@@ -411,9 +426,9 @@ class Contacto extends Base\Contact
      *
      * @return string
      */
-    public function url(string $type = 'auto', string $list = 'List')
+    public function url(string $type = 'auto', string $list = 'ListCliente?activetab=List')
     {
-        return parent::url($type, 'ListCliente?activetab=List');
+        return parent::url($type, $list);
     }
 
     /**
@@ -426,25 +441,5 @@ class Contacto extends Base\Contact
     public function verifyLogkey($value)
     {
         return $this->logkey === $value;
-    }
-
-    /**
-     * Verifies password. It also rehash the password if needed.
-     *
-     * @param string $pass
-     *
-     * @return bool
-     */
-    public function verifyPassword(string $pass): bool
-    {
-        if (password_verify($pass, $this->password)) {
-            if (password_needs_rehash($this->password, PASSWORD_DEFAULT)) {
-                $this->setPassword($pass);
-            }
-
-            return true;
-        }
-
-        return false;
     }
 }

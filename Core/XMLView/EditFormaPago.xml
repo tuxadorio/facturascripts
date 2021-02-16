@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -23,22 +23,16 @@
 <view>
     <columns>
         <group name="data" numcolumns="12">
-            <column name="code" numcolumns="2" order="100">
+            <column name="code" description="optional" display="none" order="100">
                 <widget type="text" fieldname="codpago" icon="fas fa-hashtag" maxlength="10" readonly="dinamic" required="true" />
             </column>
             <column name="description" order="110">
-                <widget type="text" fieldname="descripcion" required="true" />
+                <widget type="text" fieldname="descripcion" required="true" maxlength="100" />
             </column>
-            <column name="genreceipts" numcolumns="2" title="generate-receipt" order="120">
-                <widget type="select" fieldname="genrecibos" translate="true" required="true">
-                    <values title="paid">Pagados</values>
-                    <values title="issued">Emitidos</values>
-                </widget>
-            </column>
-            <column name="expiration" numcolumns="2" order="130">
+            <column name="expiration" numcolumns="2" order="120">
                 <widget type="number" fieldname="plazovencimiento" decimal="0" min="0" />
             </column>
-            <column name="expiration-type" numcolumns="2" order="140">
+            <column name="expiration-type" numcolumns="2" order="130">
                 <widget type="select" fieldname="tipovencimiento" translate="true" required="true">
                     <values title="days">days</values>
                     <values title="weeks">weeks</values>
@@ -47,24 +41,22 @@
                 </widget>
             </column>
         </group>
-        <group name="data2" numcolumns="12">
-            <column name="domicilied" title="domicilied" numcolumns="2" order="110">
-                <widget type="checkbox" fieldname="domiciliado"></widget>
-            </column>
-            <column name="print" title="print" numcolumns="2" order="120">
-                <widget type="checkbox" fieldname="imprimir"></widget>
-            </column>
-        </group>
-        <group name="data3" numcolumns="12">
-            <column name="company" numcolumns="2" order="100">
-                <widget type="select" fieldname="idempresa" icon="fas fa-building" onclick="EditEmpresa" required="true" readonly="dinamic">
-                    <values source="empresas" fieldcode="idempresa" fieldtitle="nombrecorto"></values>
+        <group name="advanced" numcolumns="12" valign="bottom">
+            <column name="company" titleurl="ListEmpresa" numcolumns="2" order="100">
+                <widget type="select" fieldname="idempresa" icon="fas fa-building" onclick="EditEmpresa" readonly="dinamic" required="true">
+                    <values source="empresas" fieldcode="idempresa" fieldtitle="nombrecorto" />
                 </widget>
             </column>
-            <column name="bank-account" titleurl="ListFormaPago?activetab=ListCuentaBanco" numcolumns="3" order="110">
+            <column name="bank-account" numcolumns="3" titleurl="ListFormaPago?activetab=ListCuentaBanco" order="110">
                 <widget type="select" fieldname="codcuentabanco" onclick="EditCuentaBanco">
-                    <values source="cuentasbanco" fieldcode="codcuenta" fieldtitle="descripcion"></values>
+                    <values source="cuentasbanco" fieldcode="codcuenta" fieldtitle="descripcion" />
                 </widget>
+            </column>
+            <column name="domiciled" numcolumns="2" order="120">
+                <widget type="checkbox" fieldname="domiciliado" />
+            </column>
+            <column name="paid" numcolumns="2" order="130">
+                <widget type="checkbox" fieldname="pagado" />
             </column>
         </group>
     </columns>

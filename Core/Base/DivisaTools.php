@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,7 +19,7 @@
 namespace FacturaScripts\Core\Base;
 
 use FacturaScripts\Core\App\AppSettings;
-use FacturaScripts\Core\Model\Divisa;
+use FacturaScripts\Dinamic\Model\Divisa;
 
 /**
  * DivisaTools give us some basic and common methods for currency numbers.
@@ -47,8 +47,9 @@ class DivisaTools extends NumberTools
     public function __construct()
     {
         parent::__construct();
-        if (!defined('FS_CURRENCY_POS')) {
-            define('FS_CURRENCY_POS', 'right');
+
+        if (false === \defined('FS_CURRENCY_POS')) {
+            \define('FS_CURRENCY_POS', 'right');
         }
 
         if (!isset(self::$divisas)) {
@@ -56,55 +57,58 @@ class DivisaTools extends NumberTools
             self::$divisas = $divisa->all();
 
             $coddivisa = AppSettings::get('default', 'coddivisa');
-            foreach (self::$divisas as $div) {
-                if ($div->coddivisa == $coddivisa) {
-                    self::$selectedDivisa = $div;
-                    break;
-                }
-            }
+            self::$selectedDivisa = static::get($coddivisa);
         }
+    }
+
+    /**
+     * Convert the amount form currency1 to currency2.
+     *
+     * @param float  $amount
+     * @param string $coddivisa1
+     * @param string $coddivisa2
+     *
+     * @return float
+     */
+    public static function convert($amount, $coddivisa1, $coddivisa2)
+    {
+        if ($coddivisa1 != $coddivisa2) {
+            return (float) $amount / static::get($coddivisa1)->tasaconv * static::get($coddivisa2)->tasaconv;
+        }
+
+        return (float) $amount;
     }
 
     /**
      * Finds a coddivisa and uses it as selected currency.
      * 
-     * @param mixed $model
+     * @param object $model
      */
     public function findDivisa($model)
     {
         if (isset($model->coddivisa)) {
-            foreach (self::$divisas as $div) {
-                if ($div->coddivisa == $model->coddivisa) {
-                    self::$selectedDivisa = $div;
-                    break;
-                }
-            }
+            self::$selectedDivisa = static::get($model->coddivisa);
         }
     }
 
     /**
      * Returns the value of the formatted currency.
      *
-     * @param float|string $number
-     * @param int|string   $decimals
-     * @param string       $decoration
+     * @param mixed  $number
+     * @param mixed  $decimals
+     * @param string $decoration
      *
      * @return string
      */
     public static function format($number, $decimals = FS_NF0, $decoration = 'symbol')
     {
         $txt = parent::format($number, $decimals);
-
         switch ($decoration) {
             case 'symbol':
-                $symbol = self::$selectedDivisa->simbolo;
-                if (FS_CURRENCY_POS === 'right') {
-                    return $txt . ' ' . $symbol;
-                }
-                return $symbol . ' ' . $txt;
+                return FS_CURRENCY_POS === 'right' ? $txt . ' ' . static::getSymbol() : static::getSymbol() . ' ' . $txt;
 
             case 'coddivisa':
-                return $txt . ' ' . self::$selectedDivisa->coddivisa;
+                return isset(self::$selectedDivisa) ? $txt . ' ' . self::$selectedDivisa->coddivisa : $txt . ' ???';
 
             default:
                 return $txt;
@@ -115,25 +119,25 @@ class DivisaTools extends NumberTools
      * 
      * @return string
      */
-    public function getSymbol()
+    public static function getSymbol()
     {
-        return (string) self::$selectedDivisa->simbolo;
+        return isset(self::$selectedDivisa) ? (string) self::$selectedDivisa->simbolo : '?';
     }
 
     /**
-     * Return format mask for edit grid
-     *
-     * @param int $decimals
      * 
-     * @return array
+     * @param string $coddivisa
+     *
+     * @return Divisa
      */
-    public static function gridMoneyFormat($decimals = FS_NF0)
+    private static function get($coddivisa)
     {
-        $moneyFormat = '0.';
-        for ($num = 0; $num < $decimals; $num++) {
-            $moneyFormat .= '0';
+        foreach (self::$divisas as $div) {
+            if ($div->coddivisa == $coddivisa) {
+                return $div;
+            }
         }
 
-        return ['pattern' => $moneyFormat];
+        return new Divisa();
     }
 }

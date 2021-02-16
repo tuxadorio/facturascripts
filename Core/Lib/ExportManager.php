@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,7 @@
  */
 namespace FacturaScripts\Core\Lib;
 
-use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Core\Lib\Export\ExportBase;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -32,23 +32,80 @@ class ExportManager
     /**
      * The selected engine/class to export.
      *
-     * @var mixed
+     * @var ExportBase
      */
-    private static $engine;
+    protected static $engine;
 
     /**
      * Option list.
      *
      * @var array
      */
-    private static $options;
+    protected static $options = [];
+
+    /**
+     * Default document orientation.
+     *
+     * @var string
+     */
+    protected $orientation;
+
+    /**
+     * Tools list.
+     *
+     * @var array
+     */
+    protected static $tools = [];
 
     /**
      * ExportManager constructor.
      */
     public function __construct()
     {
-        self::init();
+        static::init();
+    }
+
+    /**
+     * Adds a new page with the document data.
+     *
+     * @param mixed $model
+     *
+     * @return bool
+     */
+    public function addBusinessDocPage($model): bool
+    {
+        return empty(static::$engine) ? false : static::$engine->addBusinessDocPage($model);
+    }
+
+    /**
+     * Adds a new page with a table listing the models data.
+     *
+     * @param mixed  $model
+     * @param array  $where
+     * @param array  $order
+     * @param int    $offset
+     * @param array  $columns
+     * @param string $title
+     *
+     * @return bool
+     */
+    public function addListModelPage($model, $where, $order, $offset, $columns, $title = ''): bool
+    {
+        return empty(static::$engine) ? false : static::$engine->addListModelPage($model, $where, $order, $offset, $columns, $title);
+    }
+
+    /**
+     * Adds a new page with the model data.
+     *
+     * @param mixed  $model
+     * @param array  $columns
+     * @param string $title
+     *
+     * @return bool
+     */
+    public function addModelPage($model, $columns, $title = ''): bool
+    {
+        return empty(static::$engine) ? false : static::$engine->addModelPage($model, $columns, $title);
     }
 
     /**
@@ -60,56 +117,22 @@ class ExportManager
      */
     public static function addOption($key, $description, $icon)
     {
-        self::init();
-        self::$options[$key] = ['description' => $description, 'icon' => $icon];
+        static::init();
+        static::$options[$key] = ['description' => $description, 'icon' => $icon];
     }
 
     /**
-     * Returns default option.
+     * Adds a new tool.
      *
-     * @return string
+     * @param string $key
+     * @param string $link
+     * @param string $description
+     * @param string $icon
      */
-    public function defaultOption()
+    public static function addTool($key, $link, $description, $icon)
     {
-        $keys = array_keys(self::$options);
-        return $keys[0];
-    }
-
-    /**
-     * Adds a new page with the document data.
-     *
-     * @param mixed $model
-     */
-    public function generateBusinessDocPage($model)
-    {
-        self::$engine->generateBusinessDocPage($model);
-    }
-
-    /**
-     * Adds a new page with a table listing the models data.
-     *
-     * @param mixed           $model
-     * @param DataBaseWhere[] $where
-     * @param array           $order
-     * @param int             $offset
-     * @param array           $columns
-     * @param string          $title
-     */
-    public function generateListModelPage($model, $where, $order, $offset, $columns, $title = '')
-    {
-        self::$engine->generateListModelPage($model, $where, $order, $offset, $columns, $title);
-    }
-
-    /**
-     * Adds a new page with the model data.
-     *
-     * @param mixed  $model
-     * @param array  $columns
-     * @param string $title
-     */
-    public function generateModelPage($model, $columns, $title = '')
-    {
-        self::$engine->generateModelPage($model, $columns, $title);
+        static::init();
+        static::$tools[$key] = ['link' => $link, 'description' => $description, 'icon' => $icon];
     }
 
     /**
@@ -117,8 +140,10 @@ class ExportManager
      *
      * @param array $headers
      * @param array $rows
+     *
+     * @return bool
      */
-    public function generateTablePage($headers, $rows)
+    public function addTablePage($headers, $rows): bool
     {
         /// We need headers key to be equal to value
         $fixedHeaders = [];
@@ -126,20 +151,38 @@ class ExportManager
             $fixedHeaders[$value] = $value;
         }
 
-        self::$engine->generateTablePage($fixedHeaders, $rows);
+        return empty(static::$engine) ? false : static::$engine->addTablePage($fixedHeaders, $rows);
+    }
+
+    /**
+     * Returns default option.
+     *
+     * @return string
+     */
+    public static function defaultOption()
+    {
+        foreach (\array_keys(static::$options) as $key) {
+            return $key;
+        }
+
+        return '';
     }
 
     /**
      * Create a new doc and set headers.
      *
      * @param string $option
+     * @param string $title
      */
-    public function newDoc($option)
+    public function newDoc(string $option, string $title = '')
     {
         /// calls to the appropiate engine to generate the doc
         $className = $this->getExportClassName($option);
-        self::$engine = new $className();
-        self::$engine->newDoc();
+        static::$engine = new $className();
+        static::$engine->newDoc($title);
+        if (!empty($this->orientation)) {
+            static::$engine->setOrientation($this->orientation);
+        }
     }
 
     /**
@@ -147,9 +190,19 @@ class ExportManager
      *
      * @return array
      */
-    public function options()
+    public static function options(): array
     {
-        return self::$options;
+        return static::$options;
+    }
+
+    /**
+     * Sets default orientation.
+     * 
+     * @param string $orientation
+     */
+    public function setOrientation(string $orientation)
+    {
+        $this->orientation = $orientation;
     }
 
     /**
@@ -159,7 +212,18 @@ class ExportManager
      */
     public function show(Response &$response)
     {
-        self::$engine->show($response);
+        if (!empty(static::$engine)) {
+            static::$engine->show($response);
+        }
+    }
+
+    /**
+     * 
+     * @return array
+     */
+    public static function tools(): array
+    {
+        return self::$tools;
     }
 
     /**
@@ -171,12 +235,13 @@ class ExportManager
      */
     private function getExportClassName($option)
     {
-        $className = 'FacturaScripts\\Dinamic\\Lib\\Export\\' . $option . 'Export';
-        if (!class_exists($className)) {
-            $className = 'FacturaScripts\\Core\\Lib\\Export\\' . $option . 'Export';
+        $dinClassName = '\\FacturaScripts\\Dinamic\\Lib\\Export\\' . $option . 'Export';
+        if (\class_exists($dinClassName)) {
+            return $dinClassName;
         }
 
-        return $className;
+        $className = '\\FacturaScripts\\Core\\Lib\\Export\\' . $option . 'Export';
+        return \class_exists($className) ? $className : '\\FacturaScripts\\Core\\Lib\\Export\\PDFExport';
     }
 
     /**
@@ -184,12 +249,22 @@ class ExportManager
      */
     protected static function init()
     {
-        if (self::$options === null) {
-            self::$options = [
+        if (empty(static::$options)) {
+            static::$options = [
                 'PDF' => ['description' => 'print', 'icon' => 'fas fa-print'],
                 'XLS' => ['description' => 'spreadsheet-xls', 'icon' => 'fas fa-file-excel'],
                 'CSV' => ['description' => 'structured-data-csv', 'icon' => 'fas fa-file-csv'],
-                'MAIL' => ['description' => 'email', 'icon' => 'fas fa-envelope'],
+                'MAIL' => ['description' => 'email', 'icon' => 'fas fa-envelope']
+            ];
+        }
+
+        if (empty(static::$tools)) {
+            static::$tools = [
+                'main' => [
+                    'link' => 'ListSecuenciaDocumento?activetab=ListFormatoDocumento',
+                    'description' => 'printing-formats',
+                    'icon' => 'fas fa-cog'
+                ],
             ];
         }
     }

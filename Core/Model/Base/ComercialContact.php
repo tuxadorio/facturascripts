@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,9 +18,10 @@
  */
 namespace FacturaScripts\Core\Model\Base;
 
-use FacturaScripts\Core\Base\Utils;
-use FacturaScripts\Dinamic\Lib\IDFiscal;
 use FacturaScripts\Dinamic\Lib\RegimenIVA;
+use FacturaScripts\Dinamic\Model\FormaPago;
+use FacturaScripts\Dinamic\Model\Retencion;
+use FacturaScripts\Dinamic\Model\Serie;
 
 /**
  * Description of ComercialContact
@@ -52,6 +53,13 @@ abstract class ComercialContact extends Contact
     public $codproveedor;
 
     /**
+     * Identifier code of the retention applied to this contact.
+     *
+     * @var string
+     */
+    public $codretencion;
+
+    /**
      * Default series for this customer.
      *
      * @var string
@@ -68,7 +76,7 @@ abstract class ComercialContact extends Contact
     /**
      * True -> the customer no longer buys us or we do not want anything with him.
      *
-     * @var boolean
+     * @var bool
      */
     public $debaja;
 
@@ -78,21 +86,6 @@ abstract class ComercialContact extends Contact
      * @var string
      */
     public $fechabaja;
-
-    /**
-     * Type of fiscal identifier.
-     *
-     * @var IDFiscal
-     */
-    private static $idFiscal;
-
-    /**
-     * % IRPF retention of the document. It is obtained from the series.
-     * Each line can have a different%.
-     * 
-     * @var float|int
-     */
-    public $irpf;
 
     /**
      * Social reason of the client, that is, the official name. The one that appears on the invoices.
@@ -109,21 +102,6 @@ abstract class ComercialContact extends Contact
     public $regimeniva;
 
     /**
-     * Type of VAT regime
-     *
-     * @var RegimenIVA
-     */
-    private static $regimenIVA;
-
-    /**
-     * Type of tax identification of the client.
-     * Examples: CIF, NIF, CUIT ...
-     *
-     * @var string
-     */
-    public $tipoidfiscal;
-
-    /**
      * Website of the person.
      *
      * @var string
@@ -138,30 +116,49 @@ abstract class ComercialContact extends Contact
     abstract public function getAdresses();
 
     /**
-     * ComercialContact constructor.
-     *
-     * @param array $data
-     */
-    public function __construct(array $data = [])
-    {
-        if (self::$idFiscal === null) {
-            self::$idFiscal = new IDFiscal();
-            self::$regimenIVA = new RegimenIVA();
-        }
-
-        parent::__construct($data);
-    }
-
-    /**
      * Reset the values of all model properties.
      */
     public function clear()
     {
         parent::clear();
-        $this->irpf = 0.0;
         $this->debaja = false;
-        $this->regimeniva = self::$regimenIVA->defaultValue();
-        $this->tipoidfiscal = self::$idFiscal->defaultValue();
+        $this->regimeniva = RegimenIVA::defaultValue();
+    }
+
+    /**
+     * This function is called when creating the model table. Returns the SQL
+     * that will be executed after the creation of the table. Useful to insert values
+     * default.
+     *
+     * @return string
+     */
+    public function install()
+    {
+        /// needed dependencies
+        new Retencion();
+        new Serie();
+        new FormaPago();
+
+        return parent::install();
+    }
+
+    /**
+     * Returns default contact retention value.
+     *
+     * @return float
+     */
+    public function irpf()
+    {
+        if (empty($this->codretencion)) {
+            return 0.0;
+        }
+
+        $retention = new Retencion();
+        if ($retention->loadFromCode($this->codretencion)) {
+            return $retention->porcentaje;
+        }
+
+        return 0.0;
     }
 
     /**
@@ -171,19 +168,15 @@ abstract class ComercialContact extends Contact
      */
     public function test()
     {
-        $this->razonsocial = Utils::noHtml($this->razonsocial);
-        $this->web = Utils::noHtml($this->web);
+        $this->debaja = !empty($this->fechabaja);
 
+        $utils = $this->toolBox()->utils();
+        $this->razonsocial = $utils->noHtml($this->razonsocial);
         if (empty($this->razonsocial)) {
             $this->razonsocial = $this->nombre;
         }
 
-        if (!$this->debaja) {
-            $this->fechabaja = null;
-        } elseif (empty($this->fechabaja)) {
-            $this->fechabaja = date('d-m-Y');
-        }
-
+        $this->web = $utils->noHtml($this->web);
         return parent::test();
     }
 }

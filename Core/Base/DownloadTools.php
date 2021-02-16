@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -30,6 +30,13 @@ class DownloadTools
 {
 
     const USERAGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36';
+    const TIMEOUT = 30;
+
+    /**
+     *
+     * @var int
+     */
+    private static $lastHttpCode = 200;
 
     /**
      * Downloads and returns url content with curl or file_get_contents.
@@ -39,45 +46,86 @@ class DownloadTools
      * 
      * @return string
      */
-    public function getContents(string $url, int $timeout = 30)
+    public static function getContents(string $url, int $timeout = self::TIMEOUT)
     {
-        if (function_exists('curl_init')) {
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
-            curl_setopt($ch, CURLOPT_USERAGENT, self::USERAGENT);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
-            curl_setopt($ch, CURLOPT_AUTOREFERER, 1);
+        $ch = \curl_init();
+        \curl_setopt($ch, \CURLOPT_URL, $url);
+        \curl_setopt($ch, \CURLOPT_TIMEOUT, $timeout);
+        \curl_setopt($ch, \CURLOPT_USERAGENT, self::USERAGENT);
+        \curl_setopt($ch, \CURLOPT_RETURNTRANSFER, 1);
+        \curl_setopt($ch, \CURLOPT_FOLLOWLOCATION, 1);
+        \curl_setopt($ch, \CURLOPT_AUTOREFERER, 1);
 
-            $data = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            switch ($httpCode) {
-                case 200:
-                    curl_close($ch);
-                    return $data;
+        $data = \curl_exec($ch);
+        self::$lastHttpCode = \curl_getinfo($ch, \CURLINFO_HTTP_CODE);
+        switch (self::$lastHttpCode) {
+            case 200:
+                \curl_close($ch);
+                return $data;
 
-                case 301:
-                case 302:
-                case 303:
-                    $redirs = 0;
-                    return $this->curlRedirectExec($ch, $redirs);
+            case 301:
+            case 302:
+            case 303:
+                $redirs = 0;
+                return static::curlRedirectExec($ch, $redirs);
 
-                case 404:
-                    curl_close($ch);
-                    return 'ERROR';
-            }
-
-            /// save in log
-            $error = curl_error($ch) === '' ? 'ERROR ' . $httpCode : curl_error($ch);
-            $minilog = new MiniLog();
-            $minilog->alert($error . ' - ' . $url);
-
-            curl_close($ch);
-            return 'ERROR';
+            default:
+                \curl_close($ch);
+                return 'ERROR';
         }
 
-        return file_get_contents($url);
+        /// save in log
+        $error = \curl_error($ch) === '' ? 'ERROR ' . self::$lastHttpCode : \curl_error($ch);
+        if (\FS_DEBUG) {
+            $error .= ' - ' . $url;
+        }
+        static::log()->warning($error);
+
+        \curl_close($ch);
+        return 'ERROR';
+    }
+
+    /**
+     * 
+     * @param string $url
+     * @param int    $timeout
+     *
+     * @return array
+     */
+    public static function getHeaders(string $url, int $timeout = self::TIMEOUT)
+    {
+        $headers = [];
+
+        $ch = \curl_init();
+        \curl_setopt($ch, \CURLOPT_URL, $url);
+        \curl_setopt($ch, \CURLOPT_RETURNTRANSFER, 1);
+        \curl_setopt($ch, \CURLOPT_TIMEOUT, $timeout);
+
+        /// this function is called by curl for each header received
+        \curl_setopt($ch, \CURLOPT_HEADERFUNCTION, function ($curl, $header) use (&$headers) {
+            $len = \strlen($header);
+            $headpart = \explode(':', $header, 2);
+            if (\count($headpart) < 2) {
+                /// ignore invalid headers
+                return $len;
+            }
+
+            $key = \strtolower(\trim($headpart[0]));
+            $headers[$key][] = \trim($headpart[1]);
+            return $len;
+        });
+
+        \curl_exec($ch);
+        return $headers;
+    }
+
+    /**
+     * 
+     * @return int
+     */
+    public static function getLastHttpCode()
+    {
+        return self::$lastHttpCode;
     }
 
     /**
@@ -88,35 +136,38 @@ class DownloadTools
      * 
      * @return string
      */
-    private function curlRedirectExec(&$ch, &$redirects)
+    private static function curlRedirectExec(&$ch, &$redirects)
     {
-        curl_setopt($ch, CURLOPT_HEADER, 1);
+        \curl_setopt($ch, CURLOPT_HEADER, 1);
 
-        $data = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $data = \curl_exec($ch);
+        $httpCode = \curl_getinfo($ch, \CURLINFO_HTTP_CODE);
         switch ($httpCode) {
             case 301:
             case 302:
             case 303:
-                list($header) = explode("\r\n\r\n", $data, 2);
+                list($header) = \explode("\r\n\r\n", $data, 2);
                 $matches = [];
-                preg_match("/(Location:|URI:)[^(\n)]*/", $header, $matches);
-                $url = trim(str_replace($matches[1], "", $matches[0]));
-                $url_parsed = parse_url($url);
+                if (1 !== \preg_match("/(Location:|URI:)[^(\n)]*/i", $header, $matches)) {
+                    break;
+                }
+
+                $url = \trim(\str_replace($matches[1], "", $matches[0]));
+                $url_parsed = \parse_url($url);
                 if (isset($url_parsed)) {
-                    curl_setopt($ch, CURLOPT_URL, $url);
+                    \curl_setopt($ch, \CURLOPT_URL, $url);
                     $redirects++;
-                    return $this->curlRedirectExec($ch, $redirects);
+                    return static::curlRedirectExec($ch, $redirects);
                 }
         }
 
         if (empty($data)) {
-            curl_close($ch);
+            \curl_close($ch);
             return 'ERROR';
         }
 
-        list(, $body) = explode("\r\n\r\n", $data, 2);
-        curl_close($ch);
+        list(, $body) = \explode("\r\n\r\n", $data, 2);
+        \curl_close($ch);
         return $body;
     }
 
@@ -129,17 +180,27 @@ class DownloadTools
      * 
      * @return bool
      */
-    public function download(string $url, string $filename, int $timeout = 30): bool
+    public static function download(string $url, string $filename, int $timeout = self::TIMEOUT): bool
     {
         try {
-            $data = $this->getContents($url, $timeout);
-            if ($data && $data != 'ERROR' && file_put_contents($filename, $data) !== FALSE) {
+            $data = static::getContents($url, $timeout);
+            if ($data && $data != 'ERROR' && \file_put_contents($filename, $data) !== FALSE) {
                 return true;
             }
         } catch (Exception $exc) {
-            /// nothing to do
+            $message = \FS_DEBUG ? $exc->getMessage() . ' - ' . $url : $exc->getMessage();
+            static::log()->error($message);
         }
 
         return false;
+    }
+
+    /**
+     * 
+     * @return MiniLog
+     */
+    private static function log()
+    {
+        return new MiniLog();
     }
 }

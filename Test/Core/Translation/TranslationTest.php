@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -21,7 +21,9 @@ namespace FacturaScripts\Test\Core\Translation;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Class to verify that all JSON files from translation are correct
+ * Class to verify that all JSON files from translation are correct.
+ * 
+ * @author Carlos Carlos Garcia Gomez <carlos@facturascripts.com>
  */
 class TranslationTest extends TestCase
 {
@@ -36,13 +38,9 @@ class TranslationTest extends TestCase
      */
     protected $mainLang;
 
-    /**
-     * Sets up the fixture, for example, opens a network connection.
-     * This method is called before a test is executed.
-     */
     protected function setUp()
     {
-        $this->basePath = FS_FOLDER . '/Core/Translation/';
+        $this->basePath = \FS_FOLDER . '/Core/Translation/';
         $this->mainLang = 'en_EN.json';
     }
 
@@ -52,66 +50,13 @@ class TranslationTest extends TestCase
     public function testFiles()
     {
         foreach ($this->scanFolder($this->basePath) as $fileName) {
-            if (substr($fileName, -5) !== '.json') {
+            if (\substr($fileName, -5) !== '.json') {
                 continue;
             }
 
             $fileArray = $this->readJSON($this->basePath . $fileName);
             $msg = 'File ' . $fileName . ' is wrong';
             $this->assertNotNull($fileArray, $msg);
-        }
-    }
-
-    /**
-     * Test that secondary language don't have waste keys.
-     * Must fail when user adds on wrong file.
-     */
-    public function testWasteKeys()
-    {
-        $mainLangArray = $this->readJSON($this->basePath . $this->mainLang);
-
-        foreach ($this->scanFolder($this->basePath) as $fileName) {
-            if (substr($fileName, -5) !== '.json') {
-                continue;
-            }
-
-            $fileArray = $this->readJSON($this->basePath . $fileName);
-            $this->compareKeys($mainLangArray, $fileArray, $fileName);
-        }
-    }
-
-    /**
-     * Check that every language file have ordered keys on list.
-     */
-    public function testHasOrderedKeys()
-    {
-        foreach ($this->scanFolder($this->basePath) as $fileName) {
-            if (substr($fileName, -5) !== '.json') {
-                continue;
-            }
-
-            $fileString = $this->getJSON($this->basePath . $fileName);
-            $orderedArray = \json_decode($fileString, true);
-            \ksort($orderedArray);
-            $orderedString = json_encode($orderedArray, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-
-            $msg = 'File ' . $fileName . ' have no ordered keys.';
-            //$this->assertEquals($fileString, $orderedString, $msg);
-        }
-    }
-
-    /**
-     * Verify that all language keys are also on main language.
-     *
-     * @param array $primaryArray
-     * @param array $secondaryArray
-     * @param string $fileName
-     */
-    private function compareKeys(array $primaryArray, array &$secondaryArray, string $fileName)
-    {
-        foreach ($secondaryArray as $key => $value) {
-            $exists = array_key_exists($key, $primaryArray);
-            $msg = 'Key \'' . $key . '\' not exists on ' . $this->mainLang . '.';
         }
     }
 
@@ -124,7 +69,7 @@ class TranslationTest extends TestCase
      */
     private function scanFolder(string $folderPath): array
     {
-        return array_diff(scandir($folderPath, SCANDIR_SORT_ASCENDING), ['.', '..']);
+        return \array_diff(\scandir($folderPath, \SCANDIR_SORT_ASCENDING), ['.', '..']);
     }
 
     /**
@@ -136,18 +81,6 @@ class TranslationTest extends TestCase
      */
     private function readJSON(string $pathName)
     {
-        return json_decode(file_get_contents($pathName), true);
-    }
-
-    /**
-     * Get JSON as string.
-     *
-     * @param string $pathName
-     *
-     * @return bool|string
-     */
-    private function getJSON(string $pathName)
-    {
-        return file_get_contents($pathName);
+        return \json_decode(\file_get_contents($pathName), true);
     }
 }

@@ -21,10 +21,10 @@ namespace FacturaScripts\Core\Controller;
 use FacturaScripts\Core\Lib\ExtendedController\ListController;
 
 /**
- * Controller to list the items in the SecuenciaDocumento model
+ * Controller to list the items in the FormatoDocumento model
  *
- * @author Carlos García Gómez          <carlos@facturascripts.com>
  * @author Cristo M. Estévez Hernández  <cristom.estevez@gmail.com>
+ * @author Carlos García Gómez          <carlos@facturascripts.com>
  */
 class ListSecuenciaDocumento extends ListController
 {
@@ -36,12 +36,39 @@ class ListSecuenciaDocumento extends ListController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['menu'] = 'admin';
-        $pagedata['title'] = 'document-sequences';
-        $pagedata['icon'] = 'fas fa-code';
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['title'] = 'document-configuration';
+        $data['icon'] = 'fas fa-copy';
+        return $data;
+    }
 
-        return $pagedata;
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createCompanyFilter(string $viewName)
+    {
+        $companies = $this->codeModel->all('empresas', 'idempresa', 'nombrecorto');
+        $this->addFilterSelect($viewName, 'idempresa', 'company', 'idempresa', $companies);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createDocTypeFilter(string $viewName)
+    {
+        $types = $this->codeModel->all('estados_documentos', 'tipodoc', 'tipodoc');
+
+        /// custom translation
+        foreach ($types as $key => $value) {
+            if (!empty($value->code)) {
+                $types[$key]->description = $this->toolBox()->i18n()->trans($value->code);
+            }
+        }
+
+        $this->addFilterSelect($viewName, 'tipodoc', 'doc-type', 'tipodoc', $types);
     }
 
     /**
@@ -49,10 +76,85 @@ class ListSecuenciaDocumento extends ListController
      */
     protected function createViews()
     {
-        $this->addView('ListSecuenciaDocumento', 'SecuenciaDocumento', 'document-sequences', 'fas fa-code');
-        $this->addSearchFields('ListSecuenciaDocumento', ['titulo', 'tipodoc']);
-        $this->addOrderBy('ListSecuenciaDocumento', ['codejercicio'], 'exercise');
-        $this->addOrderBy('ListSecuenciaDocumento', ['codserie'], 'serie');
-        $this->addOrderBy('ListSecuenciaDocumento', ['numero'], 'number');
+        $this->createViewSequences();
+        $this->createViewStates();
+        $this->createViewFormats();
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewFormats(string $viewName = 'ListFormatoDocumento')
+    {
+        $this->addView($viewName, 'FormatoDocumento', 'printing-formats', 'fas fa-print');
+        $this->addSearchFields($viewName, ['nombre', 'titulo', 'texto']);
+        $this->addOrderBy($viewName, ['nombre'], 'name');
+        $this->addOrderBy($viewName, ['titulo'], 'title');
+
+        /// Filters
+        $this->createDocTypeFilter($viewName);
+        $this->createCompanyFilter($viewName);
+
+        $series = $this->codeModel->all('series', 'codserie', 'descripcion');
+        $this->addFilterSelect($viewName, 'codserie', 'serie', 'codserie', $series);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewSequences(string $viewName = 'ListSecuenciaDocumento')
+    {
+        $this->addView($viewName, 'SecuenciaDocumento', 'sequences', 'fas fa-code');
+        $this->addSearchFields($viewName, ['patron', 'tipodoc']);
+        $this->addOrderBy($viewName, ['codejercicio', 'codserie', 'tipodoc'], 'exercise', 2);
+        $this->addOrderBy($viewName, ['codserie'], 'serie');
+        $this->addOrderBy($viewName, ['numero'], 'number');
+
+        /// Filters
+        $this->createDocTypeFilter($viewName);
+        $this->createCompanyFilter($viewName);
+
+        $exercises = $this->codeModel->all('ejercicios', 'codejercicio', 'nombre');
+        $this->addFilterSelect($viewName, 'codejercicio', 'exercise', 'codejercicio', $exercises);
+
+        $series = $this->codeModel->all('series', 'codserie', 'descripcion');
+        $this->addFilterSelect($viewName, 'codserie', 'serie', 'codserie', $series);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewStates(string $viewName = 'ListEstadoDocumento')
+    {
+        $this->addView($viewName, 'EstadoDocumento', 'states', 'fas fa-tags');
+        $this->addSearchFields($viewName, ['nombre']);
+        $this->addOrderBy($viewName, ['idestado'], 'id');
+        $this->addOrderBy($viewName, ['nombre'], 'name');
+
+        /// Filters
+        $this->createDocTypeFilter($viewName);
+
+        $this->addFilterSelect($viewName, 'actualizastock', 'update-stock', 'actualizastock', $this->getActualizastockValues());
+        $this->addFilterCheckbox($viewName, 'predeterminado', 'default', 'predeterminado');
+        $this->addFilterCheckbox($viewName, 'editable', 'editable', 'editable');
+    }
+
+    /**
+     * 
+     * @return array
+     */
+    protected function getActualizastockValues()
+    {
+        return [
+            ['code' => null, 'description' => '------'],
+            ['code' => -2, 'description' => $this->toolBox()->i18n()->trans('book')],
+            ['code' => -1, 'description' => $this->toolBox()->i18n()->trans('subtract')],
+            ['code' => 0, 'description' => $this->toolBox()->i18n()->trans('do-nothing')],
+            ['code' => 1, 'description' => $this->toolBox()->i18n()->trans('add')],
+            ['code' => 2, 'description' => $this->toolBox()->i18n()->trans('foresee')],
+        ];
     }
 }

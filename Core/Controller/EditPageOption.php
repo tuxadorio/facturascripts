@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez  <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,10 +18,13 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Base;
+use FacturaScripts\Core\Base\Controller;
+use FacturaScripts\Core\Base\ControllerPermissions;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Core\Lib\Widget\VisualItemLoadEngine;
-use FacturaScripts\Core\Model;
+use FacturaScripts\Dinamic\Model\CodeModel;
+use FacturaScripts\Dinamic\Model\PageOption;
+use FacturaScripts\Dinamic\Model\User;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -31,7 +34,7 @@ use Symfony\Component\HttpFoundation\Response;
  * @author Artex Trading sa             <jcuello@artextrading.com>
  * @author Fco. Antonio Moreno Pérez    <famphuelva@gmail.com>
  */
-class EditPageOption extends Base\Controller
+class EditPageOption extends Controller
 {
 
     /**
@@ -42,11 +45,29 @@ class EditPageOption extends Base\Controller
     public $backPage;
 
     /**
+     *
+     * @var array
+     */
+    public $columns = [];
+
+    /**
+     *
+     * @var array
+     */
+    public $modals = [];
+
+    /**
      * Details of the view configuration
      *
-     * @var Model\PageOption
+     * @var PageOption
      */
     public $model;
+
+    /**
+     *
+     * @var array
+     */
+    public $rows = [];
 
     /**
      * Selected user, for which the controller columns are created or modified
@@ -69,24 +90,23 @@ class EditPageOption extends Base\Controller
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'page-configuration';
-        $pagedata['menu'] = 'admin';
-        $pagedata['icon'] = 'fas fa-wrench';
-        $pagedata['showonmenu'] = false;
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['showonmenu'] = false;
+        $data['title'] = 'options';
+        $data['icon'] = 'fas fa-wrench';
+        return $data;
     }
 
     /**
      * Get the list of users, excluding the user admin
      *
-     * @return Array
+     * @return array
      */
     public function getUserList()
     {
         $result = [];
-        $users = Model\CodeModel::all(Model\User::tableName(), 'nick', 'nick', false);
+        $users = CodeModel::all(User::tableName(), 'nick', 'nick', false);
         foreach ($users as $codeModel) {
             $result[$codeModel->code] = $codeModel->description;
         }
@@ -97,145 +117,144 @@ class EditPageOption extends Base\Controller
     /**
      * Runs the controller's private logic.
      *
-     * @param Response                   $response
-     * @param Model\User                 $user
-     * @param Base\ControllerPermissions $permissions
+     * @param Response              $response
+     * @param User                  $user
+     * @param ControllerPermissions $permissions
      */
     public function privateCore(&$response, $user, $permissions)
     {
         parent::privateCore($response, $user, $permissions);
-        $this->model = new Model\PageOption();
-        $this->selectedViewName = $this->request->get('code', '');
+        $this->model = new PageOption();
+        $this->loadSelectedViewName();
         $this->backPage = $this->request->get('url') ?: $this->selectedViewName;
-        $this->selectedUser = $this->user->admin ? $this->request->get('nick', '') : $this->user->nick;
+        $this->selectedUser = $this->user->admin ? $this->request->get('nick', $this->user->nick) : $this->user->nick;
         $this->loadPageOptions();
 
         $action = $this->request->get('action', '');
         switch ($action) {
-            case 'save':
-                $this->saveData();
-                break;
-
             case 'delete':
-                $this->deleteData();
+                $this->deleteAction();
                 break;
-        }
-    }
 
-    /**
-     * Checks and fix GroupItem array.
-     *
-     * @param array $group
-     *
-     * @return array
-     */
-    private function checkGroupItem($group)
-    {
-        foreach ($group['children'] as $key => $child) {
-            if (!isset($child['level'])) {
-                $group['children'][$key]['level'] = 0;
-            }
-        }
-
-        return $group;
-    }
-
-    /**
-     * Checking the value of the nick field.
-     * It determines if we edit a configuration for all the users or one,
-     * and if there is already configuration for the nick
-     */
-    private function checkNickAndID()
-    {
-        if ($this->model->nick != $this->selectedUser) {
-            $this->model->id = null;
-            $this->model->nick = empty($this->selectedUser) ? null : $this->selectedUser;
-        }
-
-        if ($this->model->nick === '') {
-            $this->model->nick = null;
+            case 'save':
+                $this->saveAction();
+                break;
         }
     }
 
     /**
      * Delete configuration for view
      */
-    private function deleteData()
+    protected function deleteAction()
     {
-        $nick = $this->request->get('nick');
-        $where = [
-            new DataBaseWhere('name', $this->selectedViewName)
-        ];
-
-        $where[] = empty($nick) ? new DataBaseWhere('nick', 'null', 'IS') : new DataBaseWhere('nick', $nick);
-        $rows = $this->model->all($where, [], 0, 1);
-        if ($rows[0] && $rows[0]->delete()) {
-            $this->miniLog->notice($this->i18n->trans('record-deleted-correctly'));
-            $this->loadPageOptions();
-        } else {
-            $this->miniLog->alert($this->i18n->trans('default-not-deletable'));
+        if (false === $this->permissions->allowDelete) {
+            $this->toolBox()->i18nLog()->warning('not-allowed-delete');
+            return;
         }
+
+        if ($this->model->delete()) {
+            $this->toolBox()->i18nLog()->notice('record-deleted-correctly');
+            $this->loadPageOptions();
+            return;
+        }
+
+        $this->toolBox()->i18nLog()->warning('default-not-deletable');
     }
 
     /**
-     * 
+     *
      */
     protected function loadPageOptions()
     {
-        $orderby = ['nick' => 'ASC'];
+        $order = ['nick' => 'ASC'];
         $where = [
             new DataBaseWhere('name', $this->selectedViewName),
             new DataBaseWhere('nick', $this->selectedUser),
-            new DataBaseWhere('nick', 'NULL', 'IS', 'OR'),
+            new DataBaseWhere('nick', null, 'IS', 'OR')
         ];
-
-        if (!$this->model->loadFromCode('', $where, $orderby)) {
+        if (false === $this->model->loadFromCode('', $where, $order)) {
             VisualItemLoadEngine::installXML($this->selectedViewName, $this->model);
         }
 
-        // there always need to be groups of columns
-        $groups = [];
-        $newGroupArray = [
-            'children' => [],
-            'name' => 'main',
-            'tag' => 'group',
-        ];
+        VisualItemLoadEngine::loadArray($this->columns, $this->modals, $this->rows, $this->model);
+    }
 
-        foreach ($this->model->columns as $key => $item) {
-            if ($item['tag'] === 'group') {
-                $groups[$key] = $this->checkGroupItem($item);
-            } else {
-                $newGroupArray['children'][$key] = $item;
-            }
+    protected function loadSelectedViewName()
+    {
+        $code = $this->request->get('code', '');
+        if (false === \strpos($code, '-')) {
+            $this->selectedViewName = $code;
+            return;
         }
 
-        /// is there are loose columns, then we put it on a new group
-        if (!empty($newGroupArray['children'])) {
-            $groups['main'] = $this->checkGroupItem($newGroupArray);
-        }
-
-        $this->model->columns = $groups;
+        $parts = \explode('-', $code);
+        $this->selectedViewName = empty($parts) ? $code : $parts[0];
     }
 
     /**
      * Save new configuration for view
      */
-    private function saveData()
+    protected function saveAction()
     {
-        $this->checkNickAndID();
-        $data = $this->request->request->all();
-        foreach ($data as $key => $value) {
-            if (strpos($key, '+')) {
-                $path = explode('+', $key);
-                $this->model->columns[$path[0]]['children'][$path[1]][$path[2]] = $value;
+        if (false === $this->permissions->allowUpdate) {
+            $this->toolBox()->i18nLog()->warning('not-allowed-modify');
+            return;
+        }
+
+        foreach ($this->model->columns as $key1 => $group) {
+            if ($group['tag'] === 'column') {
+                $name = $group['name'];
+                $this->setColumnOption($this->model->columns[$key1], $name, 'title', false, false);
+                $this->setColumnOption($this->model->columns[$key1], $name, 'display', false, false);
+                $this->setColumnOption($this->model->columns[$key1], $name, 'level', false, true);
+                $this->setColumnOption($this->model->columns[$key1], $name, 'readonly', true, true);
+                $this->setColumnOption($this->model->columns[$key1], $name, 'decimal', true, true);
+                $this->setColumnOption($this->model->columns[$key1], $name, 'numcolumns', false, true);
+                $this->setColumnOption($this->model->columns[$key1], $name, 'order', false, true);
+                continue;
+            }
+
+            foreach ($group['children'] as $key2 => $col) {
+                $name = $col['name'];
+                $this->setColumnOption($this->model->columns[$key1]['children'][$key2], $name, 'title', false, false);
+                $this->setColumnOption($this->model->columns[$key1]['children'][$key2], $name, 'display', false, false);
+                $this->setColumnOption($this->model->columns[$key1]['children'][$key2], $name, 'level', false, true);
+                $this->setColumnOption($this->model->columns[$key1]['children'][$key2], $name, 'readonly', true, true);
+                $this->setColumnOption($this->model->columns[$key1]['children'][$key2], $name, 'decimal', true, true);
+                $this->setColumnOption($this->model->columns[$key1]['children'][$key2], $name, 'numcolumns', false, true);
+                $this->setColumnOption($this->model->columns[$key1]['children'][$key2], $name, 'order', false, true);
             }
         }
 
         if ($this->model->save()) {
-            $this->miniLog->notice($this->i18n->trans('record-updated-correctly'));
+            $this->toolBox()->i18nLog()->notice('record-updated-correctly');
+            $this->loadPageOptions();
             return;
         }
 
-        $this->miniLog->alert($this->i18n->trans('data-save-error'));
+        $this->toolBox()->i18nLog()->error('record-save-error');
+    }
+
+    /**
+     * 
+     * @param array  $column
+     * @param string $name
+     * @param string $key
+     * @param bool   $isWidget
+     * @param bool   $allowEmpty
+     */
+    private function setColumnOption(&$column, string $name, string $key, bool $isWidget, bool $allowEmpty)
+    {
+        $newValue = $this->request->request->get($name . '-' . $key);
+        if ($isWidget) {
+            if (!empty($newValue) || $allowEmpty) {
+                $column['children'][0][$key] = $newValue;
+            }
+            return;
+        }
+
+        if (!empty($newValue) || $allowEmpty) {
+            $column[$key] = $newValue;
+        }
     }
 }

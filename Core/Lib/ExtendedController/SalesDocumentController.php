@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,6 +18,7 @@
  */
 namespace FacturaScripts\Core\Lib\ExtendedController;
 
+use FacturaScripts\Core\Lib\ExtendedController\BusinessDocumentView;
 use FacturaScripts\Dinamic\Model\Cliente;
 
 /**
@@ -30,29 +31,55 @@ abstract class SalesDocumentController extends BusinessDocumentController
 
     /**
      * 
+     * @return array
+     */
+    public function getCustomFields()
+    {
+        return [
+            [
+                'icon' => 'fas fa-hashtag',
+                'label' => 'number2',
+                'name' => 'numero2'
+            ]
+        ];
+    }
+
+    /**
+     * 
      * @return string
      */
     public function getNewSubjectUrl()
     {
         $cliente = new Cliente();
-        return $cliente->url('new');
+        return $cliente->url('new') . '?return=' . $this->url();
     }
 
     /**
      * 
      * @return array
      */
-    public function getSubjectColumns()
+    public function getPageData()
     {
-        return ['codcliente'];
+        $data = parent::getPageData();
+        $data['showonmenu'] = false;
+        return $data;
     }
 
     /**
-     * Load custom contacts data for additional address details.
-     *
-     * @param mixed $view
+     * 
+     * @return string
      */
-    protected function loadCustomContactsWidget(&$view)
+    protected function getLineXMLView()
+    {
+        return 'SalesDocumentLine';
+    }
+
+    /**
+     * Loads custom contact data for additional address details.
+     *
+     * @param BusinessDocumentView $view
+     */
+    protected function loadCustomContactsWidget($view)
     {
         $cliente = new Cliente();
         if (!$cliente->loadFromCode($view->model->codcliente)) {
@@ -61,29 +88,48 @@ abstract class SalesDocumentController extends BusinessDocumentController
 
         $addresses = [];
         foreach ($cliente->getAdresses() as $contacto) {
-            $addresses[] = ['value' => $contacto->idcontacto, 'title' => $contacto->nombre];
+            $addresses[] = ['value' => $contacto->idcontacto, 'title' => $contacto->descripcion];
         }
 
         /// billing address
         $columnBilling = $view->columnForName('billingaddr');
-        $columnBilling->widget->setValuesFromArray($addresses, false);
+        if ($columnBilling) {
+            $columnBilling->widget->setValuesFromArray($addresses, false);
+        }
 
         /// shipping address
         $columnShipping = $view->columnForName('shippingaddr');
-        $columnShipping->widget->setValuesFromArray($addresses, false, true);
+        if ($columnShipping) {
+            $columnShipping->widget->setValuesFromArray($addresses, false, true);
+        }
     }
 
     /**
      * 
-     * @param mixed $view
-     * @param array $formData
+     * @param string               $viewName
+     * @param BusinessDocumentView $view
+     */
+    protected function loadData($viewName, $view)
+    {
+        parent::loadData($viewName, $view);
+        switch ($viewName) {
+            case 'Edit' . $this->getModelClassName():
+                $this->loadCustomContactsWidget($view);
+                break;
+        }
+    }
+
+    /**
+     * 
+     * @param BusinessDocumentView $view
+     * @param array                $formData
      *
      * @return string
      */
     protected function setSubject(&$view, $formData)
     {
         if (empty($formData['codcliente'])) {
-            return 'ERROR: ' . $this->i18n->trans('customer-not-found');
+            return 'ERROR: ' . $this->toolBox()->i18n()->trans('customer-not-found');
         }
 
         if ($view->model->codcliente === $formData['codcliente']) {
@@ -96,6 +142,6 @@ abstract class SalesDocumentController extends BusinessDocumentController
             return 'OK';
         }
 
-        return 'ERROR: ' . $this->i18n->trans('customer-not-found');
+        return 'ERROR: ' . $this->toolBox()->i18n()->trans('customer-not-found');
     }
 }

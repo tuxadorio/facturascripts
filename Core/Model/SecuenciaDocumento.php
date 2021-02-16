@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2019-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -17,8 +17,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 namespace FacturaScripts\Core\Model;
-
-use FacturaScripts\Core\Base\Utils;
 
 /**
  * Personalize the numeration and code of sale and purchase documents.
@@ -42,7 +40,7 @@ class SecuenciaDocumento extends Base\ModelClass
      * @var string
      */
     public $codserie;
-    
+
     /**
      *
      * @var int
@@ -55,6 +53,12 @@ class SecuenciaDocumento extends Base\ModelClass
      * @var int
      */
     public $idsecuencia;
+
+    /**
+     *
+     * @var int
+     */
+    public $inicio;
 
     /**
      *
@@ -82,16 +86,18 @@ class SecuenciaDocumento extends Base\ModelClass
 
     /**
      *
-     * @var string
+     * @var bool
      */
-    public $titulo;
+    public $usarhuecos;
 
     public function clear()
     {
         parent::clear();
+        $this->inicio = 1;
         $this->longnumero = 6;
         $this->numero = 1;
         $this->patron = '{EJE}{SERIE}{0NUM}';
+        $this->usarhuecos = false;
     }
 
     /**
@@ -133,9 +139,19 @@ class SecuenciaDocumento extends Base\ModelClass
      */
     public function test()
     {
-        $this->patron = Utils::noHtml($this->patron);
-        $this->titulo = Utils::noHtml($this->titulo);
+        if (empty($this->idempresa)) {
+            $this->idempresa = $this->toolBox()->appSettings()->get('default', 'idempresa');
+        }
 
+        if (empty($this->inicio) || $this->inicio < 1) {
+            $this->inicio = 1;
+        }
+
+        if ($this->inicio > $this->numero) {
+            $this->numero = $this->inicio;
+        }
+
+        $this->patron = $this->toolBox()->utils()->noHtml($this->patron);
         return parent::test();
     }
 }

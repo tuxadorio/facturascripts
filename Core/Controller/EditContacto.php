@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,14 +18,17 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Core\Lib\ExtendedController\BaseView;
+use FacturaScripts\Core\Lib\ExtendedController\EditController;
+use FacturaScripts\Dinamic\Model\Contacto;
 
 /**
  * Controller to edit a single item from the Contacto model
  *
  * @author Carlos García Gómez <carlos@facturascripts.com>
  */
-class EditContacto extends ExtendedController\EditController
+class EditContacto extends EditController
 {
 
     /**
@@ -53,13 +56,76 @@ class EditContacto extends ExtendedController\EditController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'contact';
-        $pagedata['menu'] = 'sales';
-        $pagedata['icon'] = 'fas fa-address-book';
-        $pagedata['showonmenu'] = false;
+        $data = parent::getPageData();
+        $data['menu'] = 'sales';
+        $data['title'] = 'contact';
+        $data['icon'] = 'fas fa-address-book';
+        return $data;
+    }
 
-        return $pagedata;
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function addConversionButtons($viewName)
+    {
+        if (empty($this->views[$viewName]->model->codcliente)) {
+            $this->addButton($viewName, [
+                'action' => 'convert-into-customer',
+                'color' => 'success',
+                'icon' => 'fas fa-user-check',
+                'label' => 'convert-into-customer'
+            ]);
+        }
+
+        if (empty($this->views[$viewName]->model->codproveedor)) {
+            $this->addButton($viewName, [
+                'action' => 'convert-into-supplier',
+                'color' => 'success',
+                'icon' => 'fas fa-user-cog',
+                'label' => 'convert-into-supplier'
+            ]);
+        }
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createEmailsView($viewName = 'ListEmailSent')
+    {
+        $this->addListView($viewName, 'EmailSent', 'emails-sent', 'fas fa-envelope');
+        $this->views[$viewName]->addOrderBy(['date'], 'date', 2);
+        $this->views[$viewName]->addSearchFields(['addressee', 'body', 'subject']);
+
+        /// disable column
+        $this->views[$viewName]->disableColumn('to');
+
+        /// disable buttons
+        $this->setSettings($viewName, 'btnNew', false);
+    }
+
+    /**
+     * Create views.
+     */
+    protected function createViews()
+    {
+        parent::createViews();
+        $this->createEmailsView();
+    }
+
+    /**
+     * 
+     * @return bool
+     */
+    protected function editAction()
+    {
+        $return = parent::editAction();
+        if ($return && $this->active === $this->getMainViewName()) {
+            $this->updateRelations($this->views[$this->active]->model);
+        }
+
+        return $return;
     }
 
     /**
@@ -70,39 +136,80 @@ class EditContacto extends ExtendedController\EditController
     protected function execAfterAction($action)
     {
         switch ($action) {
-            case 'convert-to-customer':
+            case 'convert-into-customer':
                 $customer = $this->views['EditContacto']->model->getCustomer();
-                if (empty($customer->codcliente)) {
-                    $this->miniLog->error($this->i18n->trans('record-save-error'));
+                if ($customer->exists()) {
+                    $this->toolBox()->i18nLog()->notice('record-updated-correctly');
+                    $this->redirect($customer->url() . '&action=save-ok');
                     break;
                 }
 
-                $this->miniLog->info($this->i18n->trans('record-updated-correctly'));
-                $this->redirect($customer->url());
+                $this->toolBox()->i18nLog()->error('record-save-error');
+                break;
+
+            case 'convert-into-supplier':
+                $supplier = $this->views['EditContacto']->model->getSupplier();
+                if ($supplier->exists()) {
+                    $this->toolBox()->i18nLog()->notice('record-updated-correctly');
+                    $this->redirect($supplier->url() . '&action=save-ok');
+                    break;
+                }
+
+                $this->toolBox()->i18nLog()->error('record-save-error');
+                break;
+
+            default:
+                parent::execAfterAction($action);
+        }
+    }
+
+    /**
+     * 
+     * @param string   $viewName
+     * @param BaseView $view
+     */
+    protected function loadData($viewName, $view)
+    {
+        $mainViewName = $this->getMainViewName();
+
+        switch ($viewName) {
+            case 'ListEmailSent':
+                $email = $this->getViewModelValue($mainViewName, 'email');
+                $where = [new DataBaseWhere('addressee', $email)];
+                $view->loadData('', $where);
+                break;
+
+            case $mainViewName:
+                parent::loadData($viewName, $view);
+                if ($view->model->exists()) {
+                    $this->addConversionButtons($viewName);
+                }
                 break;
         }
     }
 
-    protected function loadData($viewName, $view)
+    /**
+     * 
+     * @param Contacto $contact
+     */
+    protected function updateRelations($contact)
     {
-        switch ($viewName) {
-            case 'EditContacto':
-                parent::loadData($viewName, $view);
-                if ($this->views[$viewName]->model->exists() && empty($this->views[$viewName]->model->codcliente)) {
-                    $button = [
-                        'action' => 'convert-to-customer',
-                        'color' => 'success',
-                        'icon' => 'fas fa-plus',
-                        'label' => 'new-customer',
-                        'type' => 'action',
-                    ];
-                    $this->addButton($viewName, $button);
-                }
-                break;
+        $customer = $contact->getCustomer(false);
+        if ($customer->idcontactofact == $contact->idcontacto && $customer->exists()) {
+            $customer->email = $contact->email;
+            $customer->fax = $contact->fax;
+            $customer->telefono1 = $contact->telefono1;
+            $customer->telefono2 = $contact->telefono2;
+            $customer->save();
+        }
 
-            default:
-                parent::loadData($viewName, $view);
-                break;
+        $supplier = $contact->getSupplier(false);
+        if ($supplier->idcontacto == $contact->idcontacto && $supplier->exists()) {
+            $supplier->email = $contact->email;
+            $supplier->fax = $contact->fax;
+            $supplier->telefono1 = $contact->telefono1;
+            $supplier->telefono2 = $contact->telefono2;
+            $supplier->save();
         }
     }
 }

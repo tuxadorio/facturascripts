@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2015-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2015-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,13 +19,12 @@
 namespace FacturaScripts\Core\Base\DataBase;
 
 use FacturaScripts\Core\Base\DataBase as db;
-use FacturaScripts\Core\Base\MiniLog;
-use FacturaScripts\Core\Base\Translator;
+use FacturaScripts\Core\Base\ToolBox;
 
 /**
- * This class group all method for DataBase, tools like check/generate table, compare constraints/columns, ...
+ * This class allows to read and check the required structure for the database tables
  *
- * @author Carlos García Gómez
+ * @author Carlos Garcia Gomez <carlos@facturascripts.com>
  */
 class DataBaseTools
 {
@@ -38,41 +37,8 @@ class DataBaseTools
     private static $dataBase;
 
     /**
-     * System translator.
-     *
-     * @var Translator
-     */
-    private static $i18n;
-
-    /**
-     * Manage the log of the entire application.
-     *
-     * @var MiniLog
-     */
-    private static $miniLog;
-
-    /**
-     * The DataBaseSQL object.
-     *
-     * @var DataBaseSQL
-     */
-    private static $sql;
-
-    /**
-     * DataBaseTools constructor.
-     */
-    public function __construct()
-    {
-        if (!isset(self::$dataBase)) {
-            self::$dataBase = new db();
-            self::$i18n = new Translator();
-            self::$miniLog = new MiniLog();
-            self::$sql = self::$dataBase->getEngine()->getSQL();
-        }
-    }
-
-    /**
-     * Checks to the database table
+     * Checks and compares the database table structure with the xml definition.
+     * Returns a SQL statement if there are differences.
      *
      * @param $tableName
      * @param $xmlCols
@@ -80,39 +46,17 @@ class DataBaseTools
      *
      * @return string
      */
-    public function checkTable($tableName, $xmlCols, $xmlCons)
+    public static function checkTable($tableName, $xmlCols, $xmlCons)
     {
-        if (!self::$dataBase->checkTableAux($tableName)) {
-            self::$miniLog->critical(self::$i18n->trans('error-to-innodb'));
-        }
-
-        /**
-         * Si hay que hacer cambios en las restricciones, eliminamos todas las restricciones,
-         * luego añadiremos las correctas. Lo hacemos así porque evita problemas en MySQL.
-         */
-        $dbCons = self::$dataBase->getConstraints($tableName);
-        $sql2 = $this->compareConstraints($tableName, $xmlCons, $dbCons, true);
-        if ($sql2 !== '') {
-            if (!self::$dataBase->exec($sql2)) {
-                self::$miniLog->critical(self::$i18n->trans('check-table', ['%tableName%' => $tableName]));
-            }
-
-            /// leemos de nuevo las restricciones
-            $dbCons = self::$dataBase->getConstraints($tableName);
-        }
-
-        /// comparamos las columnas
-        $dbCols = self::$dataBase->getColumns($tableName);
-        $sql = $this->compareColumns($tableName, $xmlCols, $dbCols);
-
-        /// comparamos las restricciones
-        $sql .= $this->compareConstraints($tableName, $xmlCons, $dbCons);
-
-        return $sql;
+        /// compare table columns and constraints against xml definition
+        $dbCols = static::dataBase()->getColumns($tableName);
+        $dbCons = static::dataBase()->getConstraints($tableName);
+        return static::compareColumns($tableName, $xmlCols, $dbCols) .
+            static::compareConstraints($tableName, $xmlCons, $dbCons);
     }
 
     /**
-     * Create the table with the structure received.
+     * Creates the database table with the provided structure.
      *
      * @param string $tableName
      * @param array  $xmlCols
@@ -120,13 +64,13 @@ class DataBaseTools
      *
      * @return string
      */
-    public function generateTable($tableName, $xmlCols, $xmlCons)
+    public static function generateTable($tableName, $xmlCols, $xmlCons)
     {
-        return self::$sql->sqlCreateTable($tableName, $xmlCols, $xmlCons);
+        return static::sql()->sqlCreateTable($tableName, $xmlCols, $xmlCons);
     }
 
     /**
-     * Extract columns and restrictions form the XML definition file of a Table.
+     * Extracts columns and constraints form the XML definition.
      *
      * @param string $tableName
      * @param array  $columns
@@ -134,68 +78,74 @@ class DataBaseTools
      *
      * @return bool
      */
-    public function getXmlTable($tableName, &$columns, &$constraints)
+    public static function getXmlTable($tableName, &$columns, &$constraints)
     {
-        $filename = $this->getXmlTableLocation($tableName);
-        if (!file_exists($filename)) {
-            self::$miniLog->critical(self::$i18n->trans('file-not-found', ['%fileName%' => $filename]));
+        $filename = static::getXmlTableLocation($tableName);
+        if (false === \file_exists($filename)) {
+            static::toolBox()->i18nLog()->critical('file-not-found', ['%fileName%' => $filename]);
             return false;
         }
 
-        $xml = simplexml_load_string(file_get_contents($filename, true));
+        $xml = \simplexml_load_string(\file_get_contents($filename, true));
         if (false === $xml) {
-            self::$miniLog->critical(self::$i18n->trans('error-reading-file', ['%fileName%' => $filename]));
+            static::toolBox()->i18nLog()->critical('error-reading-file', ['%fileName%' => $filename]);
             return false;
         }
 
-        /// columns must exists or function must return false
-        if (!isset($xml->column)) {
-            return false;
+        if ($xml->column) {
+            static::checkXmlColumns($columns, $xml);
+            if ($xml->constraint) {
+                static::checkXmlConstraints($constraints, $xml);
+            }
+
+            return true;
         }
 
-        $this->checkXmlColumns($columns, $xml);
-        if ($xml->constraint) {
-            $this->checkXmlConstraints($constraints, $xml);
-        }
-
-        return true;
+        return false;
     }
 
     /**
-     * Update the name and type foreach column from the XML
+     * Returns the full file path for table XML file.
      *
-     * @param $columns
-     * @param $xml
+     * @param string $tableName
+     *
+     * @return string
      */
-    private function checkXmlColumns(&$columns, $xml)
+    public static function getXmlTableLocation($tableName)
+    {
+        $fileName = \FS_FOLDER . '/Dinamic/Table/' . $tableName . '.xml';
+        if (\FS_DEBUG && false === \file_exists($fileName)) {
+            return \FS_FOLDER . '/Core/Table/' . $tableName . '.xml';
+        }
+
+        return $fileName;
+    }
+
+    /**
+     * Updates names and types for each column.
+     *
+     * @param array             $columns
+     * @param \SimpleXMLElement $xml
+     */
+    private static function checkXmlColumns(&$columns, $xml)
     {
         $key = 0;
         foreach ($xml->column as $col) {
             $columns[$key]['name'] = (string) $col->name;
             $columns[$key]['type'] = (string) $col->type;
-
-            $columns[$key]['null'] = 'YES';
-            if ($col->null && strtolower($col->null) === 'no') {
-                $columns[$key]['null'] = 'NO';
-            }
-
-            if ($col->default === '') {
-                $columns[$key]['default'] = null;
-            } else {
-                $columns[$key]['default'] = (string) $col->default;
-            }
-
+            $columns[$key]['null'] = $col->null && \strtolower($col->null) === 'no' ? 'NO' : 'YES';
+            $columns[$key]['default'] = $col->default === '' ? null : (string) $col->default;
             ++$key;
         }
     }
 
     /**
-     * Update the name and constraint foreach constraint from the XML
+     * Updates names and constraints for each constraint.
      *
      * @param array             $constraints
      * @param \SimpleXMLElement $xml
      */
-    private function checkXmlConstraints(&$constraints, $xml)
+    private static function checkXmlConstraints(&$constraints, $xml)
     {
         $key = 0;
         foreach ($xml->constraint as $col) {
@@ -206,7 +156,7 @@ class DataBaseTools
     }
 
     /**
-     * Compare two arrays of columns, return a SQL statement if founded differencies.
+     * Compares two arrays of columns, returns a SQL statement if there are differences.
      *
      * @param string $tableName
      * @param array  $xmlCols
@@ -214,120 +164,109 @@ class DataBaseTools
      *
      * @return string
      */
-    private function compareColumns($tableName, $xmlCols, $dbCols)
+    private static function compareColumns($tableName, $xmlCols, $dbCols)
     {
-        $result = '';
-        foreach ($xmlCols as $xml_col) {
-            if (strtolower($xml_col['type']) === 'integer') {
-                /**
-                 * The integer type used in columns can be changed in the control panel tab
-                 */
-                $xml_col['type'] = FS_DB_INTEGER;
-            }
-
-            $column = $this->searchInArray($dbCols, 'name', $xml_col['name']);
+        $sql = '';
+        foreach ($xmlCols as $xmlCol) {
+            $column = static::searchInArray($dbCols, 'name', $xmlCol['name']);
             if (empty($column)) {
-                $result .= self::$sql->sqlAlterAddColumn($tableName, $xml_col);
+                $sql .= static::sql()->sqlAlterAddColumn($tableName, $xmlCol);
                 continue;
             }
 
-            if (!$this->compareDataTypes($column['type'], $xml_col['type'])) {
-                $result .= self::$sql->sqlAlterModifyColumn($tableName, $xml_col);
+            if (false === static::compareDataTypes($column['type'], $xmlCol['type'])) {
+                $sql .= static::sql()->sqlAlterModifyColumn($tableName, $xmlCol);
             }
 
-            if ($column['default'] === null && $xml_col['default'] !== '') {
-                $result .= self::$sql->sqlAlterConstraintDefault($tableName, $xml_col);
+            if ($column['default'] === null && $xmlCol['default'] !== '') {
+                $sql .= static::sql()->sqlAlterColumnDefault($tableName, $xmlCol);
             }
 
-            if ($column['is_nullable'] !== $xml_col['null']) {
-                $result .= self::$sql->sqlAlterConstraintNull($tableName, $xml_col);
+            if ($column['is_nullable'] !== $xmlCol['null']) {
+                $sql .= static::sql()->sqlAlterColumnNull($tableName, $xmlCol);
             }
         }
 
-        return $result;
+        return $sql;
     }
 
     /**
-     * Compare two arrays with restrictions, return a SQL statement if founded differencies.
+     * Compares two arrays of constraints, returns a SQL statement if there are differences.
      *
      * @param string $tableName
      * @param array  $xmlCons
      * @param array  $dbCons
-     * @param bool   $deleteOnly
      *
      * @return string
      */
-    private function compareConstraints($tableName, $xmlCons, $dbCons, $deleteOnly = false)
+    private static function compareConstraints($tableName, $xmlCons, $dbCons)
     {
-        $result = '';
+        if (empty($xmlCons) || false === \FS_DB_FOREIGN_KEYS) {
+            return '';
+        }
 
-        foreach ($dbCons as $db_con) {
-            if (strpos('PRIMARY;UNIQUE', $db_con['name']) === false) {
-                $column = $this->searchInArray($xmlCons, 'name', $db_con['name']);
-                if (empty($column)) {
-                    $result .= self::$sql->sqlDropConstraint($tableName, $db_con);
-                }
+        /// if you have to delete a constraint, it is better to delete them all
+        $deleteCons = false;
+        $sqlDelete = '';
+        $sqlDeleteFK = '';
+        foreach ($dbCons as $dbCon) {
+            if ($dbCon['type'] === 'PRIMARY KEY') {
+                /// exclude primary key
+                continue;
+            } elseif ($dbCon['type'] === 'FOREIGN KEY') {
+                /// it is better to delete the foreign keys before the rest
+                $sqlDeleteFK .= static::sql()->sqlDropConstraint($tableName, $dbCon);
+            } else {
+                $sqlDelete .= static::sql()->sqlDropConstraint($tableName, $dbCon);
+            }
+
+            $column = static::searchInArray($xmlCons, 'name', $dbCon['name']);
+            if (empty($column)) {
+                $deleteCons = true;
             }
         }
 
-        if (!empty($xmlCons) && !$deleteOnly && FS_DB_FOREIGN_KEYS) {
-            foreach ($xmlCons as $xml_con) {
-                if (strpos($xml_con['constraint'], 'PRIMARY') === 0) {
-                    continue;
-                }
+        /// add new constraints
+        $sql = '';
+        foreach ($xmlCons as $xmlCon) {
+            /// exclude primary keys because they have no name
+            if (0 === \strpos($xmlCon['constraint'], 'PRIMARY')) {
+                continue;
+            }
 
-                $column = $this->searchInArray($dbCons, 'name', $xml_con['name']);
-                if (empty($column)) {
-                    $result .= self::$sql->sqlAddConstraint($tableName, $xml_con['name'], $xml_con['constraint']);
-                }
+            $column = static::searchInArray($dbCons, 'name', $xmlCon['name']);
+            if (empty($column)) {
+                $sql .= static::sql()->sqlAddConstraint($tableName, $xmlCon['name'], $xmlCon['constraint']);
             }
         }
 
-        return $result;
+        return $deleteCons ? $sqlDeleteFK . $sqlDelete . $sql : $sql;
     }
 
     /**
-     * Compares data types from a column.
-     * Returns True if they are the same.
+     * Compares data types from a column. Returns True if they are the same.
      *
      * @param string $dbType
      * @param string $xmlType
      *
      * @return bool
      */
-    private function compareDataTypes($dbType, $xmlType)
+    private static function compareDataTypes($dbType, $xmlType)
     {
-        $db0 = strtolower($dbType);
-        $xml = strtolower($xmlType);
-
-        $result = (
-            FS_DB_TYPE_CHECK ||
-            self::$dataBase->getEngine()->compareDataTypes($db0, $xml) ||
-            ($xml === 'serial') ||
-            (
-            strpos($db0, 'time') === 0 &&
-            strpos($xml, 'time') === 0
-            )
-            );
-
-        return $result;
+        return static::dataBase()->getEngine()->compareDataTypes($dbType, $xmlType);
     }
 
     /**
-     * Return the full file path for table XML file.
-     *
-     * @param string $tableName
-     *
-     * @return string
+     * 
+     * @return db
      */
-    private function getXmlTableLocation($tableName)
+    private static function dataBase()
     {
-        $fileName = FS_FOLDER . '/Dinamic/Table/' . $tableName . '.xml';
-        if (FS_DEBUG && !file_exists($fileName)) {
-            $fileName = FS_FOLDER . '/Core/Table/' . $tableName . '.xml';
+        if (!isset(self::$dataBase)) {
+            self::$dataBase = new db();
         }
 
-        return $fileName;
+        return self::$dataBase;
     }
 
     /**
@@ -339,16 +278,32 @@ class DataBaseTools
      *
      * @return array
      */
-    private function searchInArray($items, $index, $value)
+    private static function searchInArray($items, $index, $value)
     {
-        $result = [];
         foreach ($items as $column) {
             if ($column[$index] === $value) {
-                $result = $column;
-                break;
+                return $column;
             }
         }
 
-        return $result;
+        return [];
+    }
+
+    /**
+     * 
+     * @return DataBaseQueries
+     */
+    private static function sql()
+    {
+        return static::dataBase()->getEngine()->getSQL();
+    }
+
+    /**
+     * 
+     * @return ToolBox
+     */
+    private static function toolBox()
+    {
+        return new ToolBox();
     }
 }

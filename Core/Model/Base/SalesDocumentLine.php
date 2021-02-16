@@ -29,16 +29,23 @@ abstract class SalesDocumentLine extends BusinessDocumentLine
     /**
      * False -> the quantity column is not displayed when printing.
      *
-     * @var boolean
+     * @var bool
      */
     public $mostrar_cantidad;
 
     /**
      * False -> price, discount, tax and total columns are not displayed when printing.
      *
-     * @var boolean
+     * @var bool
      */
     public $mostrar_precio;
+
+    /**
+     * % commission of the agent.
+     *
+     * @var float|int
+     */
+    public $porcomision;
 
     /**
      * Reset the values of all model properties.
@@ -48,5 +55,6 @@ abstract class SalesDocumentLine extends BusinessDocumentLine
         parent::clear();
         $this->mostrar_cantidad = true;
         $this->mostrar_precio = true;
+        $this->porcomision = 0.0;
     }
 }

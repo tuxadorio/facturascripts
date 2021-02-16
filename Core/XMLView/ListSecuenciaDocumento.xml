@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
- * @author Carlos García Gómez          <carlos@facturascripts.com>  
+ * @author Carlos García Gómez          <carlos@facturascripts.com>
  * @author Cristo M. Estévez Hernández  <cristom.estevez@gmail.com>
 -->
 <view>
@@ -34,12 +34,11 @@
                 <values title="supplier-order">PedidoProveedor</values>
                 <values title="supplier-delivery-note">AlbaranProveedor</values>
                 <values title="supplier-invoice">FacturaProveedor</values>
-                <values title="service">Servicio</values>
             </widget>
         </column>
-        <column name="company" order="120">
+        <column name="company" display="none" order="120">
             <widget type="select" fieldname="idempresa">
-                <values source="empresas" fieldcode="idempresa" fieldtitle="nombre"></values>
+                <values source="empresas" fieldcode="idempresa" fieldtitle="nombrecorto" />
             </widget>
         </column>
         <column name="exercise" order="130">
@@ -47,7 +46,7 @@
         </column>
         <column name="serie" order="140">
             <widget type="select" fieldname="codserie">
-                <values source="series" fieldcode="codserie" fieldtitle="descripcion"></values>
+                <values source="series" fieldcode="codserie" fieldtitle="descripcion" />
             </widget>
         </column>
         <column name="number" display="right" order="150">
@@ -58,9 +57,6 @@
         </column>
         <column name="pattern" order="170">
             <widget type="text" fieldname="patron" />
-        </column>
-        <column name="title" order="180">
-            <widget type="text" fieldname="titulo" />
         </column>
     </columns>
 </view>

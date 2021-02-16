@@ -31,7 +31,7 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
 class AdminPlugins extends Base\Controller
 {
 
-    const PLUGIN_LIST_URL = 'https://www.facturascripts.com/PluginInfoList';
+    const PLUGIN_LIST_URL = 'https://facturascripts.com/PluginInfoList';
 
     /**
      * Plugin Manager.
@@ -47,7 +47,7 @@ class AdminPlugins extends Base\Controller
     public function getAllPlugins()
     {
         $downloadTools = new Base\DownloadTools();
-        $json = json_decode($downloadTools->getContents(self::PLUGIN_LIST_URL), true);
+        $json = json_decode($downloadTools->getContents(self::PLUGIN_LIST_URL, 3), true);
         if (empty($json)) {
             return [];
         }
@@ -86,13 +86,12 @@ class AdminPlugins extends Base\Controller
      */
     public function getPageData()
     {
-        $pageData = parent::getPageData();
-        $pageData['menu'] = 'admin';
-        $pageData['submenu'] = 'control-panel';
-        $pageData['title'] = 'plugins';
-        $pageData['icon'] = 'fas fa-plug';
-
-        return $pageData;
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['submenu'] = 'control-panel';
+        $data['title'] = 'plugins';
+        $data['icon'] = 'fas fa-plug';
+        return $data;
     }
 
     /**
@@ -108,7 +107,7 @@ class AdminPlugins extends Base\Controller
         }
 
         /// exclude hidden plugins
-        $hiddenPlugins = \explode(',', FS_HIDDEN_PLUGINS);
+        $hiddenPlugins = \explode(',', \FS_HIDDEN_PLUGINS);
         foreach ($installedPlugins as $key => $plugin) {
             if (\in_array($plugin['name'], $hiddenPlugins, false)) {
                 unset($installedPlugins[$key]);
@@ -143,7 +142,7 @@ class AdminPlugins extends Base\Controller
     private function disablePlugin($pluginName)
     {
         if (!$this->permissions->allowUpdate) {
-            $this->miniLog->alert($this->i18n->trans('not-allowed-modify'));
+            $this->toolBox()->i18nLog()->warning('not-allowed-modify');
             return false;
         }
 
@@ -161,7 +160,7 @@ class AdminPlugins extends Base\Controller
     private function enablePlugin($pluginName)
     {
         if (!$this->permissions->allowUpdate) {
-            $this->miniLog->alert($this->i18n->trans('not-allowed-modify'));
+            $this->toolBox()->i18nLog()->warning('not-allowed-modify');
             return false;
         }
 
@@ -185,18 +184,26 @@ class AdminPlugins extends Base\Controller
                 $this->enablePlugin($this->request->get('plugin', ''));
                 break;
 
+            case 'rebuild':
+                $this->pluginManager->deploy(true, true);
+                $this->toolBox()->cache()->clear();
+                $this->toolBox()->i18nLog()->notice('rebuild-completed');
+                break;
+
             case 'remove':
                 $this->removePlugin($this->request->get('plugin', ''));
                 break;
 
             case 'upload':
                 $this->uploadPlugin($this->request->files->get('plugin', []));
-            /// no break, to make a deploy
+                break;
 
             default:
-                /// For now, always deploy the contents of Dinamic, for testing purposes
-                $this->pluginManager->deploy(true, true);
-                $this->cache->clear();
+                if (\FS_DEBUG) {
+                    /// On debug mode, always deploy the contents of Dinamic.
+                    $this->pluginManager->deploy(true, true);
+                    $this->toolBox()->cache()->clear();
+                }
                 break;
         }
     }
@@ -211,7 +218,7 @@ class AdminPlugins extends Base\Controller
     private function removePlugin($pluginName)
     {
         if (!$this->permissions->allowDelete) {
-            $this->miniLog->alert($this->i18n->trans('not-allowed-delete'));
+            $this->toolBox()->i18nLog()->warning('not-allowed-delete');
             return false;
         }
 
@@ -228,17 +235,22 @@ class AdminPlugins extends Base\Controller
     {
         foreach ($uploadFiles as $uploadFile) {
             if (!$uploadFile->isValid()) {
-                $this->miniLog->error($uploadFile->getErrorMessage());
+                $this->toolBox()->log()->error($uploadFile->getErrorMessage());
                 continue;
             }
 
             if ($uploadFile->getMimeType() !== 'application/zip') {
-                $this->miniLog->error($this->i18n->trans('file-not-supported'));
+                $this->toolBox()->i18nLog()->error('file-not-supported');
                 continue;
             }
 
             $this->pluginManager->install($uploadFile->getPathname(), $uploadFile->getClientOriginalName());
             unlink($uploadFile->getPathname());
+        }
+
+        if ($this->pluginManager->deploymentRequired()) {
+            $this->toolBox()->i18nLog()->notice('reloading');
+            $this->redirect($this->url() . '?action=rebuild', 3);
         }
     }
 }

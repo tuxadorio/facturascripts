@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-    Document   : users.xml
+    Document   : variantes.xml
     Author     : Carlos Garcia Gomez
     Description:
         Structure for the variante table.
@@ -24,6 +24,14 @@
         <type>integer</type>
     </column>
     <column>
+        <name>idatributovalor3</name>
+        <type>integer</type>
+    </column>
+    <column>
+        <name>idatributovalor4</name>
+        <type>integer</type>
+    </column>
+    <column>
         <name>idproducto</name>
         <type>integer</type>
         <null>NO</null>
@@ -32,7 +40,11 @@
         <name>idvariante</name>
         <type>serial</type>
         <null>NO</null>
-        <default>nextval('variantes_idvariante_seq'::regclass)</default>
+    </column>
+    <column>
+        <name>margen</name>
+        <type>double precision</type>
+        <default>0</default>
     </column>
     <column>
         <name>precio</name>
@@ -60,6 +72,14 @@
     <constraint>
         <name>ca_variantes_atributo2</name>
         <type>FOREIGN KEY (idatributovalor2) REFERENCES atributos_valores (id) ON DELETE SET NULL ON UPDATE CASCADE</type>
+    </constraint>
+    <constraint>
+        <name>ca_variantes_atributo3</name>
+        <type>FOREIGN KEY (idatributovalor3) REFERENCES atributos_valores (id) ON DELETE SET NULL ON UPDATE CASCADE</type>
+    </constraint>
+    <constraint>
+        <name>ca_variantes_atributo4</name>
+        <type>FOREIGN KEY (idatributovalor4) REFERENCES atributos_valores (id) ON DELETE SET NULL ON UPDATE CASCADE</type>
     </constraint>
     <constraint>
         <name>ca_variantes_productos</name>

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -102,25 +102,28 @@ class ColumnItem extends VisualItem
     /**
      *
      * @param object $model
+     * @param bool   $onlyField
      *
      * @return string
      */
-    public function edit($model)
+    public function edit($model, $onlyField = false)
     {
         if ($this->hidden()) {
             return $this->widget->inputHidden($model);
         }
 
-        $divClass = ($this->numcolumns > 0) ? $this->css('col-md-') . $this->numcolumns : $this->css('col');
+        $editHtml = $onlyField ? $this->widget->edit($model) : $this->widget->edit($model, $this->title, $this->description, $this->titleurl);
+
+        $divClass = $this->numcolumns > 0 ? $this->css('col-md-') . $this->numcolumns : $this->css('col-md');
         $divID = empty($this->id) ? '' : ' id="' . $this->id . '"';
         return '<div' . $divID . ' class="' . $divClass . '">'
-            . $this->widget->edit($model, $this->title, $this->description, $this->titleurl)
+            . $editHtml
             . '</div>';
     }
 
     /**
      * Returns CSS percentage width
-     * 
+     *
      * @return string
      */
     public function htmlWidth()
@@ -129,7 +132,7 @@ class ColumnItem extends VisualItem
             return '100%';
         }
 
-        return round((100.00 / 12 * $this->numcolumns), 5) . '%';
+        return \round((100.00 / 12 * $this->numcolumns), 5) . '%';
     }
 
     /**
@@ -196,14 +199,14 @@ class ColumnItem extends VisualItem
                 continue;
             }
 
-            $className = VisualItemLoadEngine::getNamespace() . 'Widget' . ucfirst($child['type']);
-            if (class_exists($className)) {
+            $className = VisualItemLoadEngine::getNamespace() . 'Widget' . \ucfirst($child['type']);
+            if (\class_exists($className)) {
                 $this->widget = new $className($child);
-            } else {
-                $defaultWidget = VisualItemLoadEngine::getNamespace() . 'WidgetText';
-                $this->widget = new $defaultWidget($child);
+                break;
             }
 
+            $defaultWidget = VisualItemLoadEngine::getNamespace() . 'WidgetText';
+            $this->widget = new $defaultWidget($child);
             break;
         }
     }

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018 Carlos Garcia Gomez  <carlos@facturascripts.com>
+ * Copyright (C) 2018-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,14 +19,15 @@
 namespace FacturaScripts\Core\Model;
 
 use FacturaScripts\Core\Base\FileManager;
-use finfo;
+use FacturaScripts\Core\Base\MyFilesToken;
 
 /**
  * Class to manage attached files.
  *
- * @author Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
+ * @author Carlos García Gómez      <carlos@facturascripts.com>
+ * @author Francesc Pineda Segarra  <francesc.pineda.segarra@gmail.com>
  */
-class AttachedFile extends Base\ModelClass
+class AttachedFile extends Base\ModelOnChangeClass
 {
 
     use Base\ModelTrait;
@@ -74,12 +75,6 @@ class AttachedFile extends Base\ModelClass
     public $path;
 
     /**
-     *
-     * @var string
-     */
-    private $previousPath;
-
-    /**
      * The size of the file in bytes.
      *
      * @var int
@@ -87,24 +82,13 @@ class AttachedFile extends Base\ModelClass
     public $size;
 
     /**
-     * Class constructor.
-     *
-     * @param array $data
-     */
-    public function __construct(array $data = [])
-    {
-        parent::__construct($data);
-        $this->previousPath = $this->path;
-    }
-
-    /**
      * Reset the values of all model properties.
      */
     public function clear()
     {
         parent::clear();
-        $this->date = date('d-m-Y');
-        $this->hour = date('H:i:s');
+        $this->date = \date(self::DATE_STYLE);
+        $this->hour = \date(self::HOUR_STYLE);
         $this->size = 0;
     }
 
@@ -115,9 +99,9 @@ class AttachedFile extends Base\ModelClass
      */
     public function delete()
     {
-        $fullPath = FS_FOLDER . DIRECTORY_SEPARATOR . $this->path;
-        if (file_exists($fullPath) && !unlink($fullPath)) {
-            self::$miniLog->alert(self::$i18n->trans('cant-delete-file', ['%fileName%' => $this->path]));
+        $fullPath = $this->getFullPath();
+        if (\file_exists($fullPath) && false === \unlink($fullPath)) {
+            $this->toolBox()->i18nLog()->warning('cant-delete-file', ['%fileName%' => $this->path]);
             return false;
         }
 
@@ -126,20 +110,49 @@ class AttachedFile extends Base\ModelClass
 
     /**
      * 
-     * @param string $cod
-     * @param array  $where
-     * @param array  $orderby
-     * 
-     * @return boolean
+     * @return string
      */
-    public function loadFromCode($cod, array $where = [], array $orderby = [])
+    public function getExtension()
     {
-        if (parent::loadFromCode($cod, $where, $orderby)) {
-            $this->previousPath = $this->path;
-            return true;
+        $parts = \explode('.', \strtolower($this->filename));
+        return \count($parts) > 1 ? \end($parts) : '';
+    }
+
+    /**
+     * 
+     * @return string
+     */
+    public function getFullPath()
+    {
+        return \FS_FOLDER . '/' . $this->path;
+    }
+
+    /**
+     * 
+     * @return int
+     */
+    public function getStorageLimit(): int
+    {
+        return \defined('FS_STORAGE_LIMIT') ? (int) \FS_STORAGE_LIMIT : 0;
+    }
+
+    /**
+     * 
+     * @param array $exclude
+     *
+     * @return int
+     */
+    public function getStorageUsed(array $exclude = []): int
+    {
+        $sql = 'SELECT SUM(size) as size FROM ' . static::tableName();
+        if ($exclude) {
+            $sql .= ' WHERE idfile NOT IN (' . \implode(',', $exclude) . ')';
+        }
+        foreach (static::$dataBase->select($sql) as $row) {
+            return (int) $row ['size'];
         }
 
-        return false;
+        return 0;
     }
 
     /**
@@ -150,6 +163,15 @@ class AttachedFile extends Base\ModelClass
     public static function primaryColumn()
     {
         return 'idfile';
+    }
+
+    /**
+     * 
+     * @return string
+     */
+    public function primaryDescriptionColumn()
+    {
+        return 'filename';
     }
 
     /**
@@ -165,55 +187,102 @@ class AttachedFile extends Base\ModelClass
     /**
      * Test model data.
      *
-     * @return boolean
+     * @return bool
      */
     public function test()
     {
-        if (!file_exists(FS_FOLDER . DIRECTORY_SEPARATOR . 'MyFiles' . DIRECTORY_SEPARATOR . $this->path)) {
-            self::$miniLog->alert(self::$i18n->trans('file-not-found'));
-            return false;
-        }
-
-        if (null === $this->idfile) {
+        if (empty($this->idfile)) {
             $this->idfile = $this->newCode();
-        }
-
-        if ($this->path != $this->previousPath) {
-            return $this->setFile();
+            return $this->setFile() && parent::test();
         }
 
         return parent::test();
     }
 
     /**
+     * 
+     * @param string $type
+     * @param string $list
+     *
+     * @return string
+     */
+    public function url(string $type = 'auto', string $list = 'List'): string
+    {
+        switch ($type) {
+            case 'download':
+                return $this->path . '?myft=' . MyFilesToken::get($this->path, false);
+
+            case 'download-permanent':
+                return $this->path . '?myft=' . MyFilesToken::get($this->path, true);
+
+            default:
+                return parent::url($type, $list);
+        }
+    }
+
+    /**
+     * 
+     * @param string $field
+     *
+     * @return bool
+     */
+    protected function onChange($field)
+    {
+        switch ($field) {
+            case 'path':
+                if ($this->previousData['path']) {
+                    /// remove old file
+                    \unlink(\FS_FOLDER . '/' . $this->previousData['path']);
+                }
+                return $this->setFile();
+
+            default:
+                return parent::onChange($field);
+        }
+    }
+
+    /**
      * Examine and move new file setted.
      * 
-     * @return boolean
+     * @return bool
      */
     protected function setFile()
     {
-        /// remove old file
-        if (!empty($this->previousPath)) {
-            unlink(FS_FOLDER . DIRECTORY_SEPARATOR . $this->previousPath);
-        }
-
         $this->filename = $this->path;
-        $path = 'MyFiles' . DIRECTORY_SEPARATOR . date('Y' . DIRECTORY_SEPARATOR . 'm', strtotime($this->date));
-        if (!FileManager::createFolder(FS_FOLDER . DIRECTORY_SEPARATOR . $path, true)) {
-            self::$miniLog->critical(self::$i18n->trans('cant-create-folder', ['%folderName%' => FS_FOLDER . DIRECTORY_SEPARATOR . $path]));
+        $newFolder = 'MyFiles/' . \date('Y/m', \strtotime($this->date));
+        $newFolderPath = \FS_FOLDER . '/' . $newFolder;
+        if (false === FileManager::createFolder($newFolderPath, true)) {
+            $this->toolBox()->i18nLog()->critical('cant-create-folder', ['%folderName%' => $newFolder]);
             return false;
         }
 
-        $basePath = FS_FOLDER . DIRECTORY_SEPARATOR . 'MyFiles';
-        if (!rename($basePath . DIRECTORY_SEPARATOR . $this->path, FS_FOLDER . DIRECTORY_SEPARATOR . $path . DIRECTORY_SEPARATOR . $this->idfile)) {
+        $currentPath = \FS_FOLDER . '/MyFiles/' . $this->path;
+        if ($this->getStorageLimit() > 0 &&
+            \filesize($currentPath) + $this->getStorageUsed([$this->idfile]) > $this->getStorageLimit()) {
+            $this->toolBox()->i18nLog()->critical('storage-limit-reached');
+            \unlink($currentPath);
             return false;
         }
 
-        $this->path = $path . DIRECTORY_SEPARATOR . $this->idfile;
-        $this->previousPath = $this->path;
-        $this->size = filesize(FS_FOLDER . DIRECTORY_SEPARATOR . $this->path);
-        $finfo = new finfo();
-        $this->mimetype = $finfo->file(FS_FOLDER . DIRECTORY_SEPARATOR . $this->path, FILEINFO_MIME_TYPE);
+        if (empty($this->path) ||
+            false === \rename($currentPath, $newFolderPath . '/' . $this->idfile . '.' . $this->getExtension())) {
+            return false;
+        }
+
+        $this->path = $newFolder . '/' . $this->idfile . '.' . $this->getExtension();
+        $this->size = \filesize($this->getFullPath());
+        $finfo = new \finfo();
+        $this->mimetype = $finfo->file($this->getFullPath(), FILEINFO_MIME_TYPE);
         return true;
+    }
+
+    /**
+     * 
+     * @param array $fields
+     */
+    protected function setPreviousData(array $fields = [])
+    {
+        $more = ['path'];
+        parent::setPreviousData(\array_merge($more, $fields));
     }
 }

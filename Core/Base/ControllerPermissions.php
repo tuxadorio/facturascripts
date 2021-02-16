@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,8 +18,7 @@
  */
 namespace FacturaScripts\Core\Base;
 
-use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Dinamic\Model\RoleUser;
+use FacturaScripts\Dinamic\Model\RoleAccess;
 use FacturaScripts\Dinamic\Model\User;
 
 /**
@@ -31,25 +30,31 @@ class ControllerPermissions
 {
 
     /**
-     * Have permissitions to access data.
      *
-     * @var bool
+     * @var int
      */
-    public $allowAccess;
+    public $accessMode = 1;
 
     /**
-     * Have permissitions to delete data.
+     * Have permission to access data.
      *
      * @var bool
      */
-    public $allowDelete;
+    public $allowAccess = false;
 
     /**
-     * Have permissions to update data.
+     * Have permission to delete data.
      *
      * @var bool
      */
-    public $allowUpdate;
+    public $allowDelete = false;
+
+    /**
+     * Have permission to update data.
+     *
+     * @var bool
+     */
+    public $allowUpdate = false;
 
     /**
      * ControllerPermissions constructor.
@@ -59,46 +64,36 @@ class ControllerPermissions
      */
     public function __construct($user = false, $pageName = null)
     {
-        if ($user !== false && $pageName !== null) {
-            $this->loadFromUser($user, $pageName);
-        } else {
-            $this->clear();
-        }
-    }
-
-    /**
-     * Reset the values of all model properties.
-     */
-    public function clear()
-    {
-        $this->allowAccess = false;
-        $this->allowDelete = false;
-        $this->allowUpdate = false;
-    }
-
-    /**
-     * Load permissions from $user
-     *
-     * @param User   $user
-     * @param string $pageName
-     */
-    public function loadFromUser($user, $pageName)
-    {
-        $this->clear();
-        if ($user->admin) {
+        if (empty($user) || empty($pageName)) {
+            /// no dothing
+        } elseif ($user->admin) {
+            /// admin user
+            $this->accessMode = 99;
             $this->allowAccess = true;
             $this->allowDelete = true;
             $this->allowUpdate = true;
-        }
-
-        $roleUserModel = new RoleUser();
-        $filter = [new DataBaseWhere('nick', $user->nick)];
-        foreach ($roleUserModel->all($filter) as $roleUser) {
-            foreach ($roleUser->getRoleAccess($pageName) as $roleAccess) {
+        } else {
+            /// normal user
+            foreach (RoleAccess::allFromUser($user->nick, $pageName) as $access) {
                 $this->allowAccess = true;
-                $this->allowDelete = $roleAccess->allowdelete ? true : $this->allowDelete;
-                $this->allowUpdate = $roleAccess->allowupdate ? true : $this->allowUpdate;
+                $this->allowDelete = $access->allowdelete ? true : $this->allowDelete;
+                $this->allowUpdate = $access->allowupdate ? true : $this->allowUpdate;
             }
         }
+    }
+
+    /**
+     * 
+     * @param bool $access
+     * @param int  $accessMode
+     * @param bool $delete
+     * @param bool $update
+     */
+    public function set(bool $access, int $accessMode, bool $delete, bool $update)
+    {
+        $this->accessMode = $accessMode;
+        $this->allowAccess = $access;
+        $this->allowDelete = $delete;
+        $this->allowUpdate = $update;
     }
 }

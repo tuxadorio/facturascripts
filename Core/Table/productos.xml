@@ -44,10 +44,13 @@
         <type>text</type>
     </column>
     <column>
+        <name>fechaalta</name>
+        <type>date</type>
+    </column>
+    <column>
         <name>idproducto</name>
         <type>serial</type>
         <null>NO</null>
-        <default>nextval('productos_idproducto_seq'::regclass)</default>
     </column>
     <column>
         <name>nostock</name>

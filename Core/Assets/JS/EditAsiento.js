@@ -1,6 +1,6 @@
 /*
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -24,6 +24,7 @@ var mainForm, accountDescription, accountBalance, total, unbalance, vatRegister;
 var vatModal, vatBody;
 var accountData = {"subaccount": ""};
 var accountGraph = null;
+
 /*
  * AMOUNT Functions Management
  */
@@ -61,14 +62,16 @@ function clearAccountData() {
     accountData.vat = [];
     // Update data labels
     accountDescription.textContent = "";
-    accountBalance.textContent = "";
     vatRegister.prop("disabled", true);
-    // Update graphic bars
-    accountGraph.data.datasets.forEach((dataset) => {
-        dataset.data.lenght = 0;
-        dataset.data = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    });
-    accountGraph.update();
+    // Update balance and graphic bars
+    if (accountGraph) {
+        accountBalance.textContent = "";
+        accountGraph.data.datasets.forEach((dataset) => {
+            dataset.data.lenght = 0;
+            dataset.data = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        });
+        accountGraph.update();
+    }
 }
 
 /**
@@ -81,14 +84,16 @@ function setAccountData(data) {
     accountData.subaccount = data.subaccount;
     // Update data labels and buttons
     accountDescription.textContent = data.description;
-    accountBalance.textContent = data.balance;
-    vatRegister.prop("disabled", !data.codevat);
-    // Update graphic bars
-    accountGraph.data.datasets.forEach((dataset) => {
-        dataset.data.lenght = 0; // Force delete old data
-        dataset.data = Object.values(data.detail);
-    });
-    accountGraph.update();
+    vatRegister.prop("disabled", !data.hasvat);
+    // Update balance and graphic bars
+    if (accountGraph) {
+        accountBalance.textContent = data.balance;
+        accountGraph.data.datasets.forEach((dataset) => {
+            dataset.data.lenght = 0; // Force delete old data
+            dataset.data = Object.values(data.detail);
+        });
+        accountGraph.update();
+    }
 }
 
 /*
@@ -168,10 +173,12 @@ function customAfterSelection(row1, col1, row2, col2, preventScrolling) {
             }
 
             var exercise = $("#formGridEditAsiento input[name=codejercicio]")[0];
+            var channel = $("#formGridEditAsiento input[name=canal]")[0];
             var data = {
                 action: "account-data",
                 codsubcuenta: subAccount,
-                codejercicio: exercise.value
+                codejercicio: exercise.value,
+                canal: channel.value
             };
             $.ajax({
                 type: "POST",
@@ -197,7 +204,7 @@ function customAfterChange(changes) {
     var data = {
         action: "recalculate-document",
         changes: changes,
-        lines: getGridData("order"),
+        lines: getGridData("sortnum"),
         document: {}
     };
     $.each(mainForm.serializeArray(), function (key, value) {
@@ -222,7 +229,7 @@ function customAfterChange(changes) {
                 setAccountData(results.subaccount);
             }
 
-            // update ammounts
+            // update amounts
             setUnbalance(results.unbalance);
             total.val(results.total);
             // show VAT Register, if needed
@@ -263,6 +270,7 @@ $(document).ready(function () {
         // Add control events to Grid Controller
         addEvent("afterChange", customAfterChange);
         addEvent("afterSelection", customAfterSelection);
+
         // Graphic bars
         var ctx = document.getElementById("detail-balance");
         if (ctx) {

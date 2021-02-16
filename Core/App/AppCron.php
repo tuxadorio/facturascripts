@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -23,14 +23,22 @@ namespace FacturaScripts\Core\App;
  *
  * @author Carlos García Gómez <carlos@facturascripts.com>
  */
-class AppCron extends App
+final class AppCron extends App
 {
 
+    /**
+     * Returns the data into the standard output.
+     */
     public function render()
     {
-        foreach ($this->miniLog->read() as $log) {
-            $this->response->setContent($this->response->getContent() . $log["message"] . "\n");
+        $this->response->headers->set('Content-Type', 'text/plain');
+
+        $content = $this->response->getContent();
+        foreach ($this->toolBox()->log()->readAll() as $log) {
+            $content .= empty($content) ? $log["message"] : "\n" . $log["message"];
         }
+
+        $this->response->setContent($content . "\n");
         parent::render();
     }
 
@@ -39,23 +47,33 @@ class AppCron extends App
      *
      * @return bool
      */
-    public function run()
+    public function run(): bool
     {
-        $this->response->headers->set('Content-Type', 'text/plain');
-        if ($this->dataBase->connected()) {
-            $startTime = new \DateTime();
-            $this->miniLog->notice($this->i18n->trans('starting-cron'));
-
-            $this->runPlugins();
-
-            $endTime = new \DateTime();
-            $executionTime = $startTime->diff($endTime);
-            $this->miniLog->notice($this->i18n->trans('finished-cron', ['%timeNeeded%' => $executionTime->format("%H:%I:%S")]));
-            return true;
+        if (!parent::run()) {
+            return false;
         }
 
-        $this->response->setContent('DB-ERROR');
-        return false;
+        $startTime = new \DateTime();
+        $this->toolBox()->i18nLog()->notice('starting-cron');
+
+        $this->runPlugins();
+
+        $endTime = new \DateTime();
+        $executionTime = $startTime->diff($endTime);
+        $this->toolBox()->i18nLog()->notice('finished-cron', ['%timeNeeded%' => $executionTime->format("%H:%I:%S")]);
+        return true;
+    }
+
+    /**
+     * 
+     * @param int    $status
+     * @param string $message
+     */
+    protected function die(int $status, string $message = '')
+    {
+        $content = $this->toolBox()->i18n()->trans($message);
+        $this->response->setContent($content);
+        $this->response->setStatusCode($status);
     }
 
     /**
@@ -64,9 +82,9 @@ class AppCron extends App
     private function runPlugins()
     {
         foreach ($this->pluginManager->enabledPlugins() as $pluginName) {
-            $cronClass = "FacturaScripts\\Plugins\\{$pluginName}\\Cron";
+            $cronClass = '\\FacturaScripts\\Plugins\\' . $pluginName . '\\Cron';
             if (class_exists($cronClass)) {
-                $this->miniLog->notice($this->i18n->trans('running-plugin-cron', ['%pluginName%' => $pluginName]));
+                $this->toolBox()->i18nLog()->notice('running-plugin-cron', ['%pluginName%' => $pluginName]);
                 $cron = new $cronClass($pluginName);
                 $cron->run();
             }

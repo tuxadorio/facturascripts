@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,15 +18,15 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\ListController;
 
 /**
  * Controller to list the items in the Fabricante model
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Artex Trading sa <jcuello@artextrading.com>
+ * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Artex Trading sa     <jcuello@artextrading.com>
  */
-class ListFabricante extends ExtendedController\ListController
+class ListFabricante extends ListController
 {
 
     /**
@@ -36,12 +36,11 @@ class ListFabricante extends ExtendedController\ListController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'manufacturers';
-        $pagedata['icon'] = 'fas fa-columns';
-        $pagedata['menu'] = 'warehouse';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'warehouse';
+        $data['title'] = 'manufacturers';
+        $data['icon'] = 'fas fa-industry';
+        return $data;
     }
 
     /**
@@ -49,7 +48,7 @@ class ListFabricante extends ExtendedController\ListController
      */
     protected function createViews()
     {
-        $this->addView('ListFabricante', 'Fabricante', 'manufacturers', 'fas fa-columns');
+        $this->addView('ListFabricante', 'Fabricante', 'manufacturers', 'fas fa-industry');
         $this->addSearchFields('ListFabricante', ['nombre', 'codfabricante']);
         $this->addOrderBy('ListFabricante', ['codfabricante'], 'code');
         $this->addOrderBy('ListFabricante', ['nombre'], 'name');

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,28 +18,14 @@
  */
 define('FS_FOLDER', __DIR__);
 
-/// This function shows useful error data
-function fatal_handler()
-{
-    $error = error_get_last();
-    if (isset($error) && in_array($error["type"], [1, 64])) {
-        die("<h1>Fatal error</h1>"
-            . "<ul>"
-            . "<li><b>Type:</b> " . $error["type"] . "</li>"
-            . "<li><b>File:</b> " . $error["file"] . "</li>"
-            . "<li><b>Line:</b> " . $error["line"] . "</li>"
-            . "<li><b>Message:</b> " . $error["message"] . "</li>"
-            . "</ul>");
-    }
-}
-register_shutdown_function("fatal_handler");
-
-/// Preliminary checks
-if (!file_exists(__DIR__ . '/config.php')) {
+/**
+ * Preliminary checks
+ */
+if (false === file_exists(__DIR__ . DIRECTORY_SEPARATOR . 'config.php')) {
     if ((int) substr(phpversion(), 0, 1) < 7) {
         die('You need PHP 7<br/>You have PHP ' . phpversion());
-    } elseif (!file_exists(__DIR__ . '/vendor')) {
-        die('<h1>COMPOSER ERROR</h1><p>You need to run: composer install</p>');
+    } elseif (false === file_exists(__DIR__ . DIRECTORY_SEPARATOR . 'vendor')) {
+        die('<h1>COMPOSER ERROR</h1><p>You need to run: composer install</p><p>You should also run: npm install</p>');
     }
 
     /**
@@ -48,22 +34,34 @@ if (!file_exists(__DIR__ . '/config.php')) {
      */
     require_once __DIR__ . '/vendor/autoload.php';
 
-    $router = new FacturaScripts\Core\App\AppRouter();
-    if (!$router->getFile()) {
-        $app = new FacturaScripts\Core\App\AppInstaller();
+    $router = new \FacturaScripts\Core\App\AppRouter();
+    if (false === $router->getFile()) {
+        $app = new \FacturaScripts\Core\App\AppInstaller();
     }
-    die('');
+    exit();
 }
 
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/config.php';
 
-/// disable 30 seconds PHP limit
+/// Disable 30 seconds PHP limit
 @set_time_limit(0);
+ignore_user_abort(true);
 
-/// Initialise the application
-$router = new FacturaScripts\Core\App\AppRouter();
+/// Register error handler
+if (FS_DEBUG) {
+    $whoops = new \Whoops\Run;
+    $whoops->prependHandler(new \Whoops\Handler\PlainTextHandler());
+    $whoops->prependHandler(new \Whoops\Handler\PrettyPageHandler());
+    $whoops->register();
+} else {
+    $errorHandler = new \FacturaScripts\Core\Base\Debug\ProductionErrorHandler();
+}
 
+/**
+ * Initialise the application
+ */
+$router = new \FacturaScripts\Core\App\AppRouter();
 if (isset($argv[1]) && $argv[1] === '-cron') {
     chdir(__DIR__);
     $app = new \FacturaScripts\Core\App\AppCron();
@@ -71,7 +69,7 @@ if (isset($argv[1]) && $argv[1] === '-cron') {
     $app->run();
     $app->render();
     $app->close();
-} elseif (!$router->getFile()) {
+} elseif (false === $router->getFile()) {
     $app = $router->getApp();
 
     /// Connect to the database, cache, etc.

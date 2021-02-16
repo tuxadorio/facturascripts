@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,6 +18,8 @@
  */
 namespace FacturaScripts\Core\Base;
 
+use FacturaScripts\Dinamic\Lib\Import\CSVImport;
+
 /**
  * Description of InitClass
  *
@@ -27,53 +29,118 @@ abstract class InitClass
 {
 
     /**
-     * Cache object.
-     *
-     * @var Cache
-     */
-    protected static $cache;
-
-    /**
-     * Database object.
-     *
-     * @var DataBase
-     */
-    protected static $dataBase;
-
-    /**
-     * Translator object.
-     *
-     * @var Translator
-     */
-    protected static $i18n;
-
-    /**
-     * MiniLog object.
-     *
-     * @var MiniLog
-     */
-    protected static $miniLog;
-
-    /**
-     * CronClass constructor.
-     */
-    public function __construct()
-    {
-        if (!isset(self::$cache)) {
-            self::$cache = new Cache();
-            self::$dataBase = new DataBase();
-            self::$i18n = new Translator();
-            self::$miniLog = new MiniLog();
-        }
-    }
-
-    /**
      * Code to load every time FacturaScripts starts.
      */
     abstract public function init();
 
     /**
-     * Code to load every time the plugin is installed or updated.
+     * Code to load every time the plugin is enabled or updated.
      */
     abstract public function update();
+
+    /**
+     * 
+     * @return string
+     */
+    protected function getNamespace()
+    {
+        return \substr(static::class, 0, -5);
+    }
+
+    /**
+     * 
+     * @param mixed $extension
+     *
+     * @return bool
+     */
+    protected function loadExtension($extension): bool
+    {
+        $namespace = \get_class($extension);
+        $findNamespace = $this->getNamespace() . '\\Extension\\';
+        if (\strpos($namespace, $findNamespace) !== 0) {
+            $this->toolBox()->log()->error('Target object not found for: ' . $namespace);
+            return false;
+        }
+
+        $className = \substr($namespace, \strlen($findNamespace));
+        switch ($className) {
+            case 'Model\\Base\\BusinessDocument':
+                return $this->loadBusinessDocumentExtension($extension, [
+                        'AlbaranCliente', 'AlbaranProveedor', 'FacturaCliente', 'FacturaProveedor',
+                        'PedidoCliente', 'PedidoProveedor', 'PresupuestoCliente', 'PresupuestoProveedor'
+                ]);
+
+            case 'Model\\Base\\BusinessDocumentLine':
+                return $this->loadBusinessDocumentExtension($extension, [
+                        'LineaAlbaranCliente', 'LineaAlbaranProveedor', 'LineaFacturaCliente',
+                        'LineaFacturaProveedor', 'LineaPedidoCliente', 'LineaPedidoProveedor',
+                        'LineaPresupuestoCliente', 'LineaPresupuestoProveedor'
+                ]);
+
+            case 'Model\\Base\\PurchaseDocument':
+                return $this->loadBusinessDocumentExtension($extension, [
+                        'AlbaranProveedor', 'FacturaProveedor', 'PedidoProveedor', 'PresupuestoProveedor'
+                ]);
+
+            case 'Model\\Base\\PurchaseDocumentLine':
+                return $this->loadBusinessDocumentExtension($extension, [
+                        'LineaAlbaranProveedor', 'LineaFacturaProveedor', 'LineaPedidoProveedor', 'LineaPresupuestoProveedor'
+                ]);
+
+            case 'Model\\Base\\SalesDocument':
+                return $this->loadBusinessDocumentExtension($extension, [
+                        'AlbaranCliente', 'FacturaCliente', 'PedidoCliente', 'PresupuestoCliente'
+                ]);
+
+            case 'Model\\Base\\SalesDocumentLine':
+                return $this->loadBusinessDocumentExtension($extension, [
+                        'LineaAlbaranCliente', 'LineaFacturaCliente', 'LineaPedidoCliente', 'LineaPresupuestoCliente'
+                ]);
+
+            default:
+                $targetClass = '\\FacturaScripts\\Dinamic\\' . $className;
+                $targetClass::addExtension($extension);
+        }
+
+        return true;
+    }
+
+    /**
+     * 
+     * @param mixed $extension
+     * @param array $models
+     *
+     * @return bool
+     */
+    private function loadBusinessDocumentExtension($extension, $models): bool
+    {
+        foreach ($models as $model) {
+            $targetClass = '\\FacturaScripts\\Dinamic\\Model\\' . $model;
+            $targetClass::addExtension($extension);
+        }
+
+        return true;
+    }
+
+    /**
+     * 
+     * @return ToolBox
+     */
+    protected function toolBox()
+    {
+        return new ToolBox();
+    }
+
+    /**
+     * 
+     * @param string $tableName
+     */
+    protected function updateTableData(string $tableName)
+    {
+        $sql = CSVImport::updateTableSQL($tableName);
+        if ($sql) {
+            $dataBase = new DataBase();
+            $dataBase->exec($sql);
+        }
+    }
 }

@@ -77,6 +77,14 @@
         <type>character varying(100)</type>
     </column>
     <column>
+        <name>dtopor1</name>
+        <type>double precision</type>
+    </column>
+    <column>
+        <name>dtopor2</name>
+        <type>double precision</type>
+    </column>
+    <column>
         <name>editable</name>
         <type>boolean</type>
     </column>
@@ -91,13 +99,12 @@
     </column>
     <column>
         <name>hora</name>
-        <type>time without time zone</type>
+        <type>time</type>
     </column>
     <column>
         <name>idalbaran</name>
         <type>serial</type>
         <null>NO</null>
-        <default>nextval('albaranescli_idalbaran_seq'::regclass)</default>
     </column>
     <column>
         <name>idcontactoenv</name>
@@ -124,6 +131,11 @@
         <type>double precision</type>
     </column>
     <column>
+        <name>netosindto</name>
+        <type>double precision</type>
+        <default>0</default>
+    </column>
+    <column>
         <name>nick</name>
         <type>character varying(50)</type>
     </column>
@@ -145,27 +157,21 @@
         <type>text</type>
     </column>
     <column>
-        <name>pagado</name>
-        <type>boolean</type>
-        <null>NO</null>
-        <default>false</default>
-    </column>
-    <column>
-        <name>porcomision</name>
-        <type>double precision</type>
-    </column>
-    <column>
         <name>provincia</name>
         <type>character varying(100)</type>
     </column>
     <column>
         <name>tasaconv</name>
         <type>double precision</type>
-        <null>NO</null>
     </column>
     <column>
         <name>total</name>
         <type>double precision</type>
+    </column>
+    <column>
+        <name>totalcomision</name>
+        <type>double precision</type>
+        <default>0</default>
     </column>
     <column>
         <name>totaleuros</name>
@@ -183,17 +189,42 @@
         <name>totalrecargo</name>
         <type>double precision</type>
     </column>
+    <column>
+        <name>totalsuplidos</name>
+        <type>double precision</type>
+        <default>0</default>
+    </column>
     <constraint>
         <name>albaranescli_pkey</name>
         <type>PRIMARY KEY (idalbaran)</type>
+    </constraint>
+    <constraint>
+        <name>ca_albaranescli_agentes</name>
+        <type>FOREIGN KEY (codagente) REFERENCES agentes (codagente) ON DELETE SET NULL ON UPDATE CASCADE</type>
     </constraint>
     <constraint>
         <name>ca_albaranescli_almacenes</name>
         <type>FOREIGN KEY (codalmacen) REFERENCES almacenes (codalmacen) ON DELETE RESTRICT ON UPDATE CASCADE</type>
     </constraint>
     <constraint>
+        <name>ca_albaranescli_clientes</name>
+        <type>FOREIGN KEY (codcliente) REFERENCES clientes (codcliente) ON DELETE RESTRICT ON UPDATE CASCADE</type>
+    </constraint>
+    <constraint>
+        <name>ca_albaranescli_divisas</name>
+        <type>FOREIGN KEY (coddivisa) REFERENCES divisas (coddivisa) ON DELETE RESTRICT ON UPDATE CASCADE</type>
+    </constraint>
+    <constraint>
         <name>ca_albaranescli_ejercicios</name>
         <type>FOREIGN KEY (codejercicio) REFERENCES ejercicios (codejercicio) ON DELETE RESTRICT ON UPDATE CASCADE</type>
+    </constraint>
+    <constraint>
+        <name>ca_albaranescli_empresas</name>
+        <type>FOREIGN KEY (idempresa) REFERENCES empresas (idempresa) ON DELETE CASCADE ON UPDATE CASCADE</type>
+    </constraint>
+    <constraint>
+        <name>ca_albaranescli_estados</name>
+        <type>FOREIGN KEY (idestado) REFERENCES estados_documentos (idestado) ON DELETE RESTRICT ON UPDATE CASCADE</type>
     </constraint>
     <constraint>
         <name>ca_albaranescli_series</name>

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,7 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController\ListBusinessDocument;
+use FacturaScripts\Dinamic\Lib\ExtendedController\ListBusinessDocument;
 
 /**
  * Controller to list the items in the PedidoCliente model
@@ -38,12 +38,11 @@ class ListPedidoCliente extends ListBusinessDocument
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'orders';
-        $pagedata['icon'] = 'fas fa-copy';
-        $pagedata['menu'] = 'sales';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'sales';
+        $data['title'] = 'orders';
+        $data['icon'] = 'fas fa-copy';
+        return $data;
     }
 
     /**
@@ -52,6 +51,9 @@ class ListPedidoCliente extends ListBusinessDocument
     protected function createViews()
     {
         $this->createViewSales('ListPedidoCliente', 'PedidoCliente', 'orders');
+        $this->addButtonGroupDocument('ListPedidoCliente');
+        $this->addButtonApproveDocument('ListPedidoCliente');
+
         $this->createViewLines('ListLineaPedidoCliente', 'LineaPedidoCliente');
     }
 }

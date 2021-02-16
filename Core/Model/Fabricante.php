@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez  <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,13 +18,11 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\Base\Utils;
-
 /**
  * A manufacturer of products.
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Artex Trading sa <jcuello@artextrading.com>
+ * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Artex Trading sa     <jcuello@artextrading.com>
  */
 class Fabricante extends Base\ModelClass
 {
@@ -72,17 +70,41 @@ class Fabricante extends Base\ModelClass
      */
     public function test()
     {
-        $this->codfabricante = Utils::noHtml($this->codfabricante);
-        $this->nombre = Utils::noHtml($this->nombre);
+        $utils = $this->toolBox()->utils();
+        $this->codfabricante = $utils->noHtml($this->codfabricante);
+        $this->nombre = $utils->noHtml($this->nombre);
 
-        if (empty($this->codfabricante) || strlen($this->codfabricante) > 8) {
-            self::$miniLog->alert(self::$i18n->trans('code-manufacturer-valid-length'));
-        } elseif (empty($this->nombre) || strlen($this->nombre) > 100) {
-            self::$miniLog->alert(self::$i18n->trans('manufacturer-description-not-valid'));
-        } else {
-            return parent::test();
+        if ($this->codfabricante && 1 !== \preg_match('/^[A-Z0-9_\+\.\-]{1,8}$/i', $this->codfabricante)) {
+            $this->toolBox()->i18nLog()->error(
+                'invalid-alphanumeric-code',
+                ['%value%' => $this->codfabricante, '%column%' => 'codfabricante', '%min%' => '1', '%max%' => '8']
+            );
+            return false;
         }
 
-        return false;
+        if (empty($this->nombre) || \strlen($this->nombre) > 100) {
+            $this->toolBox()->i18nLog()->warning(
+                'invalid-column-lenght',
+                ['%column%' => 'nombre', '%min%' => '1', '%max%' => '100']
+            );
+            return false;
+        }
+
+        return parent::test();
+    }
+
+    /**
+     * 
+     * @param array $values
+     *
+     * @return bool
+     */
+    protected function saveInsert(array $values = [])
+    {
+        if (empty($this->codfabricante)) {
+            $this->codfabricante = $this->newCode();
+        }
+
+        return parent::saveInsert($values);
     }
 }

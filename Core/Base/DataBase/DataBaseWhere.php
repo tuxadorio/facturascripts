@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,7 +19,6 @@
 namespace FacturaScripts\Core\Base\DataBase;
 
 use FacturaScripts\Core\Base\DataBase;
-use FacturaScripts\Core\Base\Utils;
 
 /**
  * Structure that defines a WHERE condition to filter the model data
@@ -29,9 +28,6 @@ use FacturaScripts\Core\Base\Utils;
  */
 class DataBaseWhere
 {
-
-    const MATCH_DATE = "/^([\d]{1,2})-([\d]{1,2})-([\d]{4})$/i";
-    const MATCH_DATETIME = "/^([\d]{1,2})-([\d]{1,2})-([\d]{4}) ([\d]{1,2}):([\d]{1,2}):([\d]{1,2})$/i";
 
     /**
      * Link with the active database.
@@ -83,6 +79,44 @@ class DataBaseWhere
         $this->operation = $operation;
         $this->operator = $operator;
         $this->value = $value;
+
+        /// check restrictions with null values
+        if (null === $value && $operator === '=') {
+            $this->operator = 'IS';
+        } elseif (null === $value && $operator === '!=') {
+            $this->operator = 'IS NOT';
+        }
+    }
+
+    /**
+     * Given a list of fields with operators:
+     * '|' for OR operations
+     * ',' for AND operations
+     * Returns an array with the field (key) and the operation (value).
+     *
+     * @param string $fields
+     *
+     * @return array
+     */
+    public static function applyOperation(string $fields)
+    {
+        if (empty($fields)) {
+            return [];
+        }
+
+        $result = [];
+        foreach (\explode(',', $fields) as $field) {
+            if ($field !== '' && \strpos($field, '|') === false) {
+                $result[$field] = 'AND';
+            }
+        }
+        foreach (\explode('|', $fields) as $field) {
+            if ($field !== '' && \strpos($field, ',') === false) {
+                $result[$field] = 'OR';
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -101,7 +135,7 @@ class DataBaseWhere
                 continue;
             }
 
-            $fields = explode('|', $item->fields);
+            $fields = \explode('|', $item->fields);
             foreach ($fields as $field) {
                 $result[$field] = $item->value;
             }
@@ -120,14 +154,13 @@ class DataBaseWhere
      */
     public function getSQLWhereItem($applyOperation = false, $prefix = ''): string
     {
-        $fields = explode('|', $this->fields);
-        $value = ($this->operator === 'LIKE') ? $this->value : $this->getValue($this->value);
-        $result = $this->applyValueToFields($value, $fields);
+        $fields = \explode('|', $this->fields);
+        $result = $this->applyValueToFields($this->value, $fields);
         if ($result === '') {
             return '';
         }
 
-        if (count($fields) > 1) {
+        if (\count($fields) > 1) {
             $result = '(' . $result . ')';
         }
 
@@ -152,19 +185,19 @@ class DataBaseWhere
         $join = false;
         $group = false;
 
-        $keys = array_keys($whereItems);
+        $keys = \array_keys($whereItems);
         foreach ($keys as $num => $key) {
             $next = isset($keys[$num + 1]) ? $keys[$num + 1] : null;
 
             // Calculate the logical grouping
-            $prefix = is_null($next) ? '' : self::getGroupPrefix($whereItems[$next], $group);
+            $prefix = \is_null($next) ? '' : self::getGroupPrefix($whereItems[$next], $group);
 
             // Calculate the sql clause for the condition
             $result .= $whereItems[$key]->getSQLWhereItem($join, $prefix);
             $join = true;
 
             // Closes the logical condition of grouping if it exists
-            if (!is_null($next) && $group && $whereItems[$next]->operation != 'OR') {
+            if (null !== $next && $group && $whereItems[$next]->operation != 'OR') {
                 $result .= ')';
                 $group = false;
             }
@@ -185,8 +218,8 @@ class DataBaseWhere
     /**
      * Apply one value to a field list.
      *
-     * @param string $value
-     * @param array  $fields
+     * @param mixed $value
+     * @param array $fields
      *
      * @return string
      */
@@ -195,35 +228,49 @@ class DataBaseWhere
         $result = '';
         foreach ($fields as $field) {
             $union = empty($result) ? '' : ' OR ';
-            if ($this->operator !== 'LIKE') {
-                $result .= $union . $field . ' ' . $this->dataBase->getOperator($this->operator) . ' ' . $value;
-                continue;
-            }
+            switch ($this->operator) {
+                case 'LIKE':
+                    $result .= $union . 'LOWER(' . $this->escapeColumn($field) . ') '
+                        . $this->dataBase->getOperator($this->operator) . ' ' . $this->getValueFromOperatorLike($value);
+                    break;
 
-            /// in LIKE opertator we must break words before search
-            $result .= $union . '(';
-            $union = '';
-            foreach (explode(' ', Utils::noHtml($value)) as $query) {
-                $result .= $union . 'LOWER(' . $field . ') ' . $this->dataBase->getOperator($this->operator) . ' ' . $this->getValueFromOperatorLike($query);
-                $union = ' AND ';
+                case 'XLIKE':
+                    $result .= $union . '(';
+                    $union2 = '';
+                    foreach (\explode(' ', $value) as $query) {
+                        $result .= $union2 . 'LOWER(' . $this->escapeColumn($field) . ') '
+                            . $this->dataBase->getOperator('LIKE') . ' ' . $this->getValueFromOperatorLike($query);
+                        $union2 = ' AND ';
+                    }
+                    $result .= ')';
+                    break;
+
+                default:
+                    $result .= $union . $this->escapeColumn($field) . ' '
+                        . $this->dataBase->getOperator($this->operator) . ' ' . $this->getValue($value);
+                    break;
             }
-            $result .= ')';
         }
 
         return $result;
     }
 
     /**
-     * Formats the date value with the database format.
-     *
-     * @param bool $addTime
+     * 
+     * @param string $column
      *
      * @return string
      */
-    private function format2Date($addTime = false)
+    private function escapeColumn($column)
     {
-        $time = $addTime ? ' H:i:s' : '';
-        return "'" . date($this->dataBase->dateStyle() . $time, strtotime($this->value)) . "'";
+        $exclude = ['.', 'CAST('];
+        foreach ($exclude as $char) {
+            if (\strpos($column, $char) !== false) {
+                return $column;
+            }
+        }
+
+        return $this->dataBase->escapeColumn($column);
     }
 
     /**
@@ -254,14 +301,14 @@ class DataBaseWhere
      */
     private function getValueFromOperatorIn($values): string
     {
-        if (0 === stripos($values, 'select ')) {
+        if (0 === \stripos($values, 'select ')) {
             return $values;
         }
 
         $result = '';
         $comma = '';
-        foreach (explode(',', $values) as $value) {
-            $result .= $comma . "'" . $this->dataBase->escapeString($value) . "'";
+        foreach (\explode(',', $values) as $value) {
+            $result .= $comma . $this->dataBase->var2str($value);
             $comma = ',';
         }
         return $result;
@@ -276,11 +323,11 @@ class DataBaseWhere
      */
     private function getValueFromOperatorLike($value): string
     {
-        if (is_bool($value)) {
-            return $value ? 'TRUE' : 'FALSE';
+        if (\is_null($value) || \is_bool($value)) {
+            return $this->dataBase->var2str($value);
         }
 
-        if (strpos($value, '%') === false) {
+        if (\strpos($value, '%') === false) {
             return "LOWER('%" . $this->dataBase->escapeString($value) . "%')";
         }
 
@@ -297,53 +344,17 @@ class DataBaseWhere
     private function getValueFromOperator($value): string
     {
         switch ($this->operator) {
-            case 'LIKE':
-                return $this->getValueFromOperatorLike($value);
-
-            case 'IS':
-            case 'IS NOT':
-                return (string) $value;
-
             case 'IN':
+            case 'NOT IN':
                 return '(' . $this->getValueFromOperatorIn($value) . ')';
 
-            case 'REGEXP':
-                return "'" . $this->dataBase->escapeString((string) $value) . "'";
+            case 'LIKE':
+            case 'XLIKE':
+                return $this->getValueFromOperatorLike($value);
 
             default:
-                return '';
+                return $this->dataBase->var2str($value);
         }
-    }
-
-    /**
-     * Returns the value for the type.
-     *
-     * @param string $value
-     *
-     * @return string
-     */
-    private function getValueFromType($value)
-    {
-        switch (gettype($value)) {
-            case 'boolean':
-                $result = $value ? 'TRUE' : 'FALSE';
-                break;
-
-            /// DATE
-            case preg_match(self::MATCH_DATE, $value) > 0:
-                $result = $this->format2Date();
-                break;
-
-            /// DATETIME
-            case preg_match(self::MATCH_DATETIME, $value) > 0:
-                $result = $this->format2Date(true);
-                break;
-
-            default:
-                $result = "'" . $this->dataBase->escapeString($value) . "'";
-        }
-
-        return $result;
     }
 
     /**
@@ -355,10 +366,14 @@ class DataBaseWhere
      */
     private function getValue($value): string
     {
-        if ($value === null) {
-            return 'NULL';
+        if (\in_array($this->operator, ['IN', 'LIKE', 'NOT IN', 'XLIKE'], false)) {
+            return $this->getValueFromOperator($value);
         }
 
-        return in_array($this->operator, ['LIKE', 'IS', 'IS NOT', 'IN', 'REGEXP'], false) ? $this->getValueFromOperator($value) : $this->getValueFromType($value);
+        if (0 === \strpos($value, 'field:')) {
+            return $this->dataBase->escapeColumn(\substr($value, 6));
+        }
+
+        return $this->dataBase->var2str($value);
     }
 }

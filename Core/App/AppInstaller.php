@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,10 +18,9 @@
  */
 namespace FacturaScripts\Core\App;
 
-use FacturaScripts\Core\Base\MiniLog;
-use FacturaScripts\Core\Base\FileManager;
+use DateTimeZone;
 use FacturaScripts\Core\Base\PluginManager;
-use FacturaScripts\Core\Base\Translator;
+use FacturaScripts\Core\Base\ToolBox;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -30,22 +29,8 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * @author Carlos García Gómez <carlos@facturascripts.com>
  */
-class AppInstaller
+final class AppInstaller
 {
-
-    /**
-     * Translation engine.
-     *
-     * @var Translator
-     */
-    private $i18n;
-
-    /**
-     * App log manager.
-     *
-     * @var MiniLog
-     */
-    private $miniLog;
 
     /**
      * Request on which we can get data.
@@ -60,25 +45,21 @@ class AppInstaller
     public function __construct()
     {
         $this->request = Request::createFromGlobals();
-
-        define('FS_LANG', $this->request->get('fs_lang', $this->getUserLanguage()));
-        $this->i18n = new Translator();
-        $this->miniLog = new MiniLog();
+        \define('FS_LANG', $this->request->get('fs_lang', $this->getUserLanguage()));
 
         $installed = false;
-        if (!$this->searchErrors() && $this->request->getMethod() === 'POST') {
-            if ($this->createDataBase() && $this->createFolders() && $this->saveHtaccess() && $this->saveInstall()) {
-                $installed = true;
-            }
+        if (false === $this->searchErrors() && $this->request->getMethod() === 'POST' &&
+            $this->createDataBase() && $this->createFolders() && $this->saveHtaccess() && $this->saveInstall()) {
+            $installed = true;
         }
 
         if ($installed && !empty($this->request->get('unattended', ''))) {
             echo 'OK';
         } elseif ($installed) {
-            header('Location: ' . $this->getUri());
+            $this->render('Installer/Redir.html.twig');
         } elseif ('TRUE' === $this->request->get('phpinfo', '')) {
             /** @noinspection ForgottenDebugOutputInspection */
-            phpinfo();
+            \phpinfo();
         } else {
             $this->render();
         }
@@ -101,32 +82,30 @@ class AppInstaller
         ];
 
         $dbType = $this->request->request->get('fs_db_type');
-        if ('postgresql' == $dbType && strtolower($dbData['name']) != $dbData['name']) {
-            $this->miniLog->alert($this->i18n->trans('database-name-must-be-lowercase'));
+        if ('postgresql' == $dbType && \strtolower($dbData['name']) != $dbData['name']) {
+            ToolBox::i18nLog()->warning('database-name-must-be-lowercase');
             return false;
         }
 
         switch ($dbType) {
             case 'mysql':
-                if (class_exists('mysqli')) {
+                if (\class_exists('mysqli')) {
                     return $this->testMysql($dbData);
                 }
 
-                $this->miniLog->critical($this->i18n->trans('php-extension-not-found', ['%extension%' => 'mysqli']));
-                break;
+                ToolBox::i18nLog()->critical('php-extension-not-found', ['%extension%' => 'mysqli']);
+                return false;
 
             case 'postgresql':
-                if (function_exists('pg_connect')) {
+                if (\function_exists('pg_connect')) {
                     return $this->testPostgreSql($dbData);
                 }
 
-                $this->miniLog->critical($this->i18n->trans('php-extension-not-found', ['%extension%' => 'postgresql']));
-                break;
-
-            default:
-                $this->miniLog->critical($this->i18n->trans('cant-connect-database'));
+                ToolBox::i18nLog()->critical('php-extension-not-found', ['%extension%' => 'postgresql']);
+                return false;
         }
 
+        ToolBox::i18nLog()->critical('cant-connect-database');
         return false;
     }
 
@@ -139,17 +118,13 @@ class AppInstaller
     {
         // Check each needed folder to deploy
         foreach (['Plugins', 'Dinamic', 'MyFiles'] as $folder) {
-            if (!FileManager::createFolder($folder)) {
-                $this->miniLog->critical($this->i18n->trans('cant-create-folders', ['%folder%' => $folder]));
+            if (false === ToolBox::files()->createFolder($folder)) {
+                ToolBox::i18nLog()->critical('cant-create-folders', ['%folder%' => $folder]);
                 return false;
             }
         }
 
         $pluginManager = new PluginManager();
-        $hiddenPlugins = \explode(',', $this->request->request->get('hidden_plugins', ''));
-        foreach ($hiddenPlugins as $pluginName) {
-            $pluginManager->enable($pluginName);
-        }
         $pluginManager->deploy();
         return true;
     }
@@ -162,7 +137,7 @@ class AppInstaller
     private function getUri()
     {
         $uri = $this->request->getBasePath();
-        return ('/' === substr($uri, -1)) ? substr($uri, 0, -1) : $uri;
+        return ('/' === \substr($uri, -1)) ? \substr($uri, 0, -1) : $uri;
     }
 
     /**
@@ -173,60 +148,31 @@ class AppInstaller
      */
     private function getUserLanguage()
     {
-        $dataLanguage = explode(';', filter_input(INPUT_SERVER, 'HTTP_ACCEPT_LANGUAGE'));
-        $userLanguage = str_replace('-', '_', explode(',', $dataLanguage[0])[0]);
-        return file_exists(FS_FOLDER . '/Core/Translation/' . $userLanguage . '.json') ? $userLanguage : 'en_EN';
-    }
-
-    /**
-     * Timezones list with GMT offset
-     *
-     * @return array
-     *
-     * @link http://stackoverflow.com/a/9328760
-     */
-    private function getTimezoneList()
-    {
-        $zonesArray = [];
-        $timestamp = time();
-        foreach (timezone_identifiers_list() as $key => $zone) {
-            date_default_timezone_set($zone);
-            $zonesArray[$key]['zone'] = $zone;
-            $zonesArray[$key]['diff_from_GMT'] = 'UTC/GMT ' . date('P', $timestamp);
-        }
-
-        return $zonesArray;
-    }
-
-    /**
-     * Return a random string
-     *
-     * @param int $length
-     *
-     * @return bool|string
-     */
-    private function randomString($length = 20)
-    {
-        return substr(str_shuffle('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, $length);
+        $dataLanguage = \explode(';', \filter_input(INPUT_SERVER, 'HTTP_ACCEPT_LANGUAGE'));
+        $userLanguage = \str_replace('-', '_', \explode(',', $dataLanguage[0])[0]);
+        return \file_exists(\FS_FOLDER . '/Core/Translation/' . $userLanguage . '.json') ? $userLanguage : 'en_EN';
     }
 
     /**
      * Renders HTML.
+     * 
+     * @param string $template
      */
-    private function render()
+    private function render($template = 'Installer/Install.html.twig')
     {
         /// HTML template variables
         $templateVars = [
-            'license' => file_get_contents(FS_FOLDER . DIRECTORY_SEPARATOR . 'COPYING'),
-            'memcache_prefix' => $this->randomString(8),
-            'timezones' => $this->getTimezoneList()
+            'license' => \file_get_contents(\FS_FOLDER . DIRECTORY_SEPARATOR . 'COPYING'),
+            'memcache_prefix' => ToolBox::utils()->randomString(8),
+            'timezones' => DateTimeZone::listIdentifiers(),
+            'version' => PluginManager::CORE_VERSION
         ];
 
         /// Load the template engine
         $webRender = new WebRender();
 
         /// Generate and return the HTML
-        $response = new Response($webRender->render('Installer/Install.html.twig', $templateVars), Response::HTTP_OK);
+        $response = new Response($webRender->render($template, $templateVars), Response::HTTP_OK);
         $response->send();
     }
 
@@ -237,8 +183,8 @@ class AppInstaller
      */
     private function saveHtaccess()
     {
-        $contentFile = FileManager::extractFromMarkers(FS_FOLDER . DIRECTORY_SEPARATOR . 'htaccess-sample', 'FacturaScripts code');
-        return FileManager::insertWithMarkers($contentFile, FS_FOLDER . DIRECTORY_SEPARATOR . '.htaccess', 'FacturaScripts code');
+        $contentFile = ToolBox::files()->extractFromMarkers(\FS_FOLDER . DIRECTORY_SEPARATOR . 'htaccess-sample', 'FacturaScripts code');
+        return ToolBox::files()->insertWithMarkers($contentFile, \FS_FOLDER . DIRECTORY_SEPARATOR . '.htaccess', 'FacturaScripts code');
     }
 
     /**
@@ -248,38 +194,39 @@ class AppInstaller
      */
     private function saveInstall()
     {
-        $file = fopen(FS_FOLDER . '/config.php', 'wb');
+        $file = \fopen(\FS_FOLDER . '/config.php', 'wb');
         if (\is_resource($file)) {
-            fwrite($file, "<?php\n");
-            fwrite($file, "define('FS_COOKIES_EXPIRE', " . $this->request->request->get('fs_cookie_expire', 604800) . ");\n");
-            fwrite($file, "define('FS_ROUTE', '" . $this->request->request->get('fs_route', $this->getUri()) . "');\n");
-            fwrite($file, "define('FS_DB_FOREIGN_KEYS', true);\n");
-            fwrite($file, "define('FS_DB_INTEGER', 'INTEGER');\n");
-            fwrite($file, "define('FS_DB_TYPE_CHECK', true);\n");
+            \fwrite($file, "<?php\n");
+            \fwrite($file, "define('FS_COOKIES_EXPIRE', " . $this->request->request->get('fs_cookie_expire', 604800) . ");\n");
+            \fwrite($file, "define('FS_ROUTE', '" . $this->request->request->get('fs_route', $this->getUri()) . "');\n");
+            \fwrite($file, "define('FS_DB_FOREIGN_KEYS', true);\n");
+            \fwrite($file, "define('FS_DB_TYPE_CHECK', true);\n");
+            \fwrite($file, "define('FS_MYSQL_CHARSET', 'utf8');\n");
+            \fwrite($file, "define('FS_MYSQL_COLLATE', 'utf8_bin');\n");
 
             $fields = [
                 'lang', 'timezone', 'db_type', 'db_host', 'db_port', 'db_name', 'db_user',
                 'db_pass', 'cache_host', 'cache_port', 'cache_prefix', 'hidden_plugins'
             ];
             foreach ($fields as $field) {
-                fwrite($file, "define('FS_" . strtoupper($field) . "', '" . $this->request->request->get('fs_' . $field, '') . "');\n");
+                \fwrite($file, "define('FS_" . \strtoupper($field) . "', '" . $this->request->request->get('fs_' . $field, '') . "');\n");
             }
 
             $booleanFields = ['debug', 'disable_add_plugins', 'disable_rm_plugins'];
             foreach ($booleanFields as $field) {
-                fwrite($file, "define('FS_" . strtoupper($field) . "', " . $this->request->request->get('fs_' . $field, 'false') . ");\n");
+                \fwrite($file, "define('FS_" . \strtoupper($field) . "', " . $this->request->request->get('fs_' . $field, 'false') . ");\n");
             }
 
             if ($this->request->request->get('db_type') === 'MYSQL' && $this->request->request->get('mysql_socket') !== '') {
-                fwrite($file, "\nini_set('mysqli.default_socket', '" . $this->request->request->get('mysql_socket') . "');\n");
+                \fwrite($file, "\nini_set('mysqli.default_socket', '" . $this->request->request->get('mysql_socket') . "');\n");
             }
 
-            fwrite($file, "\n");
-            fclose($file);
+            \fwrite($file, "\n");
+            \fclose($file);
             return true;
         }
 
-        $this->miniLog->critical($this->i18n->trans('cant-save-install'));
+        ToolBox::i18nLog()->critical('cant-save-install');
         return false;
     }
 
@@ -293,24 +240,24 @@ class AppInstaller
         $errors = false;
 
         if ((float) '3,1' >= (float) '3.1') {
-            $this->miniLog->critical($this->i18n->trans('wrong-decimal-separator'));
+            ToolBox::i18nLog()->critical('wrong-decimal-separator');
             $errors = true;
         }
 
-        foreach (['bcmath', 'curl', 'gd', 'mbstring', 'openssl', 'simplexml', 'zip'] as $extension) {
-            if (!extension_loaded($extension)) {
-                $this->miniLog->critical($this->i18n->trans('php-extension-not-found', ['%extension%' => $extension]));
+        foreach (['bcmath', 'curl', 'fileinfo', 'gd', 'mbstring', 'openssl', 'simplexml', 'zip'] as $extension) {
+            if (false === \extension_loaded($extension)) {
+                ToolBox::i18nLog()->critical('php-extension-not-found', ['%extension%' => $extension]);
                 $errors = true;
             }
         }
 
-        if (function_exists('apache_get_modules') && !in_array('mod_rewrite', apache_get_modules())) {
-            $this->miniLog->critical($this->i18n->trans('apache-module-not-found', ['%module%' => 'mod_rewrite']));
+        if (\function_exists('apache_get_modules') && false === \in_array('mod_rewrite', \apache_get_modules())) {
+            ToolBox::i18nLog()->critical('apache-module-not-found', ['%module%' => 'mod_rewrite']);
             $errors = true;
         }
 
-        if (!is_writable(FS_FOLDER)) {
-            $this->miniLog->critical($this->i18n->trans('folder-not-writable'));
+        if (false === \is_writable(\FS_FOLDER)) {
+            ToolBox::i18nLog()->critical('folder-not-writable');
             $errors = true;
         }
 
@@ -327,7 +274,7 @@ class AppInstaller
     private function testMysql($dbData)
     {
         if ($dbData['socket'] !== '') {
-            ini_set('mysqli.default_socket', $dbData['socket']);
+            \ini_set('mysqli.default_socket', $dbData['socket']);
         }
 
         // Omit the DB name because it will be checked on a later stage
@@ -345,8 +292,8 @@ class AppInstaller
             }
         }
 
-        $this->miniLog->critical($this->i18n->trans('cant-connect-database'));
-        $this->miniLog->critical((string) $connection->connect_errno . ': ' . $connection->connect_error);
+        ToolBox::i18nLog()->critical('cant-connect-database');
+        ToolBox::log()->critical((string) $connection->connect_errno . ': ' . $connection->connect_error);
         return false;
     }
 
@@ -361,11 +308,11 @@ class AppInstaller
     {
         $connectionStr = 'host=' . $dbData['host'] . ' port=' . $dbData['port'];
         $connection = @\pg_connect($connectionStr . ' dbname=postgres user=' . $dbData['user'] . ' password=' . $dbData['pass']);
-        if (is_resource($connection)) {
+        if (\is_resource($connection)) {
             // Check that the DB exists, if it doesn't, we try to create a new one
             $sqlExistsBD = "SELECT 1 AS result FROM pg_database WHERE datname = '" . $dbData['name'] . "';";
             $result = \pg_query($connection, $sqlExistsBD);
-            if (is_resource($result) && \pg_num_rows($result) > 0) {
+            if (\is_resource($result) && \pg_num_rows($result) > 0) {
                 return true;
             }
 
@@ -375,9 +322,9 @@ class AppInstaller
             }
         }
 
-        $this->miniLog->critical($this->i18n->trans('cant-connect-database'));
-        if (is_resource($connection) && \pg_last_error($connection) !== false) {
-            $this->miniLog->critical((string) \pg_last_error($connection));
+        ToolBox::i18nLog()->critical('cant-connect-database');
+        if (\is_resource($connection) && \pg_last_error($connection) !== false) {
+            ToolBox::log()->critical((string) \pg_last_error($connection));
         }
 
         return false;

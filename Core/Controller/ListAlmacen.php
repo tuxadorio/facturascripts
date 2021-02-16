@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,7 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\ListController;
 
 /**
  *  Controller to list the items in the Almacen model
@@ -26,7 +26,7 @@ use FacturaScripts\Core\Lib\ExtendedController;
  * @author Carlos García Gómez  <carlos@facturascripts.com>
  * @author Artex Trading sa     <jcuello@artextrading.com>
  */
-class ListAlmacen extends ExtendedController\ListController
+class ListAlmacen extends ListController
 {
 
     /**
@@ -36,12 +36,11 @@ class ListAlmacen extends ExtendedController\ListController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'warehouses';
-        $pagedata['icon'] = 'fas fa-building';
-        $pagedata['menu'] = 'warehouse';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'warehouse';
+        $data['title'] = 'warehouses';
+        $data['icon'] = 'fas fa-warehouse';
+        return $data;
     }
 
     /**
@@ -49,42 +48,28 @@ class ListAlmacen extends ExtendedController\ListController
      */
     protected function createViews()
     {
-        $this->createViewAlmacen();
-        $this->createViewTransfer();
+        $this->createViewWarehouse();
     }
 
     /**
      * 
-     * @param string $name
+     * @param string $viewName
      */
-    protected function createViewAlmacen($name = 'ListAlmacen')
+    protected function createViewWarehouse(string $viewName = 'ListAlmacen')
     {
-        $this->addView($name, 'Almacen', 'warehouses', 'fas fa-building');
-        $this->addSearchFields($name, ['nombre', 'codalmacen']);
-        $this->addOrderBy($name, ['codalmacen'], 'code');
-        $this->addOrderBy($name, ['nombre'], 'name');
+        $this->addView($viewName, 'Almacen', 'warehouses', 'fas fa-warehouse');
+        $this->addSearchFields($viewName, ['apartado', 'ciudad', 'codalmacen', 'codpostal', 'direccion', 'nombre', 'provincia']);
+        $this->addOrderBy($viewName, ['codalmacen'], 'code');
+        $this->addOrderBy($viewName, ['nombre'], 'name');
 
         /// Filters
-        $selectValues = $this->codeModel->all('empresas', 'idempresa', 'nombre');
-        $this->addFilterSelect($name, 'idempresa', 'company', 'idempresa', $selectValues);
-    }
+        $companies = $this->codeModel->all('empresas', 'idempresa', 'nombre');
+        $this->addFilterSelect($viewName, 'idempresa', 'company', 'idempresa', $companies);
 
-    /**
-     * 
-     * @param string $name
-     */
-    protected function createViewTransfer($name = 'ListTransferenciaStock')
-    {
-        $this->addView($name, 'TransferenciaStock', 'stock-transfers', 'fas fa-exchange-alt');
-        $this->addSearchFields($name, ['observaciones']);
-        $this->addOrderBy($name, ['codalmacenorigen'], 'origin-warehouse');
-        $this->addOrderBy($name, ['codalmacendestino'], 'destination-warehouse');
-        $this->addOrderBy($name, ['fecha'], 'date');
-        $this->addOrderBy($name, ['usuario'], 'user');
+        $countries = $this->codeModel->all('paises', 'codpais', 'nombre');
+        $this->addFilterSelect($viewName, 'codpais', 'country', 'codpais', $countries);
 
-        /// Filters
-        $this->addFilterDatePicker($name, 'fromfecha', 'from-date', 'fecha', '>=');
-        $this->addFilterDatePicker($name, 'untilfecha', 'until-date', 'fecha', '<=');
-        $this->addFilterAutocomplete($name, 'nick', 'user', 'nick', 'users', 'nick', 'nick');
+        $provinces = $this->codeModel->all('almacenes', 'provincia', 'provincia');
+        $this->addFilterSelect($viewName, 'provincia', 'province', 'provincia', $provinces);
     }
 }

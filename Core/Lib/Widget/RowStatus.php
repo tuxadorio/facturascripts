@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -21,7 +21,7 @@ namespace FacturaScripts\Core\Lib\Widget;
 /**
  * Description of RowStatus
  *
- * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Carlos García Gómez <carlos@facturascripts.com>
  */
 class RowStatus extends VisualItem
 {
@@ -51,6 +51,23 @@ class RowStatus extends VisualItem
 
     /**
      *
+     * @return string
+     */
+    public function legend(): string
+    {
+        $trs = '';
+        foreach ($this->options as $opt) {
+            $title = $opt['title'] ?? '?';
+            $trs .= '<tr class="' . $this->colorToClass($opt['color'], 'table-') . '">'
+                . '<td class="text-center">' . static::$i18n->trans($title) . '</td>'
+                . '</tr>';
+        }
+
+        return empty($trs) ? '' : '<table class="table mb-0">' . $trs . '</table>';
+    }
+
+    /**
+     *
      * @param object $model
      * @param string $classPrefix
      *
@@ -64,6 +81,25 @@ class RowStatus extends VisualItem
             $rowColor = $this->getColorFromOption($opt, $value, $classPrefix);
             if (!empty($rowColor)) {
                 return $rowColor;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     *
+     * @param object $model
+     *
+     * @return string
+     */
+    public function trTitle($model)
+    {
+        foreach ($this->options as $opt) {
+            $fieldname = isset($opt['fieldname']) ? $opt['fieldname'] : $this->fieldname;
+            $value = isset($model->{$fieldname}) ? $model->{$fieldname} : null;
+            if ($this->applyOperatorFromOption($opt, $value)) {
+                return isset($opt['title']) ? static::$i18n->trans($opt['title']) : '';
             }
         }
 

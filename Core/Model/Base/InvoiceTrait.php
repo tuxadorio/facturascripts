@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,8 +19,10 @@
 namespace FacturaScripts\Core\Model\Base;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Core\Model\Base\TransformerDocument;
+use FacturaScripts\Dinamic\Lib\Accounting\InvoiceToAccounting;
+use FacturaScripts\Dinamic\Lib\ReceiptGenerator;
 use FacturaScripts\Dinamic\Model\Asiento;
-use FacturaScripts\Dinamic\Model\FormaPago;
 
 /**
  * Description of InvoiceTrait
@@ -30,6 +32,8 @@ use FacturaScripts\Dinamic\Model\FormaPago;
 trait InvoiceTrait
 {
 
+    use AccEntryRelationTrait;
+
     /**
      * Code of the invoice that rectifies.
      *
@@ -38,11 +42,11 @@ trait InvoiceTrait
     public $codigorect;
 
     /**
-     * Payment method associated.
+     * Indicates whether the document can be modified
      *
-     * @var string
+     * @var bool
      */
-    public $codpago;
+    public $editable;
 
     /**
      * Date of the document.
@@ -50,20 +54,6 @@ trait InvoiceTrait
      * @var string
      */
     public $fecha;
-
-    /**
-     * Related accounting entry ID, if any.
-     *
-     * @var int
-     */
-    public $idasiento;
-
-    /**
-     * ID of the related payment accounting entry, if any.
-     *
-     * @var int
-     */
-    public $idasientop;
 
     /**
      * Primary key.
@@ -80,30 +70,79 @@ trait InvoiceTrait
     public $idfacturarect;
 
     /**
-     * Due date of the invoice.
      *
-     * @var string
+     * @var bool
      */
-    public $vencimiento;
+    public $pagada;
 
     abstract public function all(array $where = [], array $order = [], int $offset = 0, int $limit = 50);
 
     abstract public function getLines();
 
+    abstract public function getReceipts();
+
+    abstract protected static function toolBox();
+
     /**
-     * 
-     * @return Asiento
+     * Returns all children documents of this one.
+     *
+     * @return TransformerDocument[]
      */
-    public function getAccountingEntry()
+    public function childrenDocuments()
     {
-        $asiento = new Asiento();
-        $asiento->loadFromCode($this->idasiento);
-        return $asiento;
+        $children = parent::childrenDocuments();
+        foreach ($this->getRefunds() as $invoice) {
+            /// is this invoice in children?
+            $found = false;
+            foreach ($children as $child) {
+                if ($child->idfactura == $invoice->idfactura) {
+                    $found = true;
+                    break;
+                }
+            }
+
+            if (false === $found) {
+                $children[] = $invoice;
+            }
+        }
+
+        return $children;
     }
 
     /**
      * 
-     * @return self[]
+     * @return bool
+     */
+    public function delete()
+    {
+        if (false === $this->editable) {
+            $this->toolBox()->i18nLog()->warning('non-editable-document');
+            return false;
+        }
+
+        /// remove receipts
+        foreach ($this->getReceipts() as $receipt) {
+            $receipt->disableInvoiceUpdate(true);
+            if (false === $receipt->delete()) {
+                $this->toolBox()->i18nLog()->warning('cant-remove-receipt');
+                return false;
+            }
+        }
+
+        /// remove accounting
+        $acEntry = $this->getAccountingEntry();
+        $acEntry->editable = true;
+        if ($acEntry->exists() && false === $acEntry->delete()) {
+            $this->toolBox()->i18nLog()->warning('cant-remove-accounting-entry');
+            return false;
+        }
+
+        return parent::delete();
+    }
+
+    /**
+     * 
+     * @return static[]
      */
     public function getRefunds()
     {
@@ -113,6 +152,67 @@ trait InvoiceTrait
 
         $where = [new DataBaseWhere('idfacturarect', $this->idfactura)];
         return $this->all($where, ['idfactura' => 'DESC'], 0, 0);
+    }
+
+    /**
+     * This function is called when creating the model table. Returns the SQL
+     * that will be executed after the creation of the table. Useful to insert values
+     * default.
+     *
+     * @return string
+     */
+    public function install()
+    {
+        $sql = parent::install();
+        new Asiento();
+
+        return $sql;
+    }
+
+    /**
+     * 
+     * @return bool
+     */
+    public function paid()
+    {
+        return $this->pagada;
+    }
+
+    /**
+     * Returns all parent document of this one.
+     *
+     * @return TransformerDocument[]
+     */
+    public function parentDocuments()
+    {
+        $parents = parent::parentDocuments();
+        $where = [new DataBaseWhere('idfactura', $this->idfacturarect)];
+        foreach ($this->all($where, ['idfactura' => 'DESC'], 0, 0) as $invoice) {
+            /// is this invoice in parents?
+            $found = false;
+            foreach ($parents as $parent) {
+                if ($parent->primaryColumnValue() == $invoice->primaryColumnValue()) {
+                    $found = true;
+                    break;
+                }
+            }
+
+            if (false === $found) {
+                $parents[] = $invoice;
+            }
+        }
+
+        return $parents;
+    }
+
+    /**
+     * Returns the name of the column that is the model's primary key.
+     *
+     * @return string
+     */
+    public static function primaryColumn()
+    {
+        return 'idfactura';
     }
 
     /**
@@ -126,7 +226,7 @@ trait InvoiceTrait
         foreach ($this->getRefunds() as $invoice) {
             foreach ($invoice->getLines() as $line) {
                 if ($line->referencia == $ref) {
-                    $amount += abs($line->cantidad);
+                    $amount += \abs($line->cantidad);
                 }
             }
         }
@@ -136,18 +236,68 @@ trait InvoiceTrait
 
     /**
      * 
-     * @param string $codpago
+     * @param string $field
+     *
+     * @return bool
      */
-    public function setPaymentMethod($codpago)
+    protected function onChange($field)
     {
-        $this->vencimiento = $this->fecha;
-
-        $formaPago = new FormaPago();
-        if ($formaPago->loadFromCode($codpago)) {
-            $this->codpago = $codpago;
-
-            $string = '+' . $formaPago->plazovencimiento . ' ' . $formaPago->tipovencimiento;
-            $this->vencimiento = date('d-m-Y', strtotime($this->fecha . ' ' . $string));
+        if (false === parent::onChange($field)) {
+            return false;
         }
+
+        switch ($field) {
+            case 'codcliente':
+            case 'codproveedor':
+                /// prevent from removing paid receipts
+                foreach ($this->getReceipts() as $receipt) {
+                    if ($receipt->pagado) {
+                        $this->toolBox()->i18nLog()->warning('paid-receipts-prevent-action');
+                        return false;
+                    }
+                }
+            /// no break
+            case 'codpago':
+                /// remove unpaid receipts
+                foreach ($this->getReceipts() as $receipt) {
+                    if (false === $receipt->pagado && false === $receipt->delete()) {
+                        $this->toolBox()->i18nLog()->warning('cant-remove-receipt');
+                        return false;
+                    }
+                }
+            /// no break
+            case 'fecha':
+            case 'total':
+                return $this->onChangeTotal();
+        }
+
+        return true;
+    }
+
+    /**
+     * 
+     * @return bool
+     */
+    protected function onChangeTotal()
+    {
+        /// remove accounting entry
+        $asiento = $this->getAccountingEntry();
+        $asiento->editable = true;
+        if ($asiento->exists() && false === $asiento->delete()) {
+            $this->toolBox()->i18nLog()->warning('cant-remove-account-entry');
+            return false;
+        }
+
+        /// create a new accounting entry
+        $this->idasiento = null;
+        $tool = new InvoiceToAccounting();
+        $tool->generate($this);
+
+        /// check receipts
+        $generator = new ReceiptGenerator();
+        $generator->generate($this);
+        $generator->update($this);
+
+        return true;
     }
 }

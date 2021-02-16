@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -23,7 +23,7 @@ use Symfony\Component\HttpFoundation\Request;
 /**
  * Description of BaseWidget
  *
- * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Carlos García Gómez <carlos@facturascripts.com>
  */
 class BaseWidget extends VisualItem
 {
@@ -87,7 +87,7 @@ class BaseWidget extends VisualItem
         $this->icon = $data['icon'] ?? '';
         $this->onclick = $data['onclick'] ?? '';
         $this->readonly = $data['readonly'] ?? 'false';
-        $this->required = isset($data['required']);
+        $this->required = isset($data['required']) ? \strtolower($data['required']) === 'true' : false;
         $this->type = $data['type'];
         $this->loadOptions($data['children']);
         $this->assets();
@@ -106,13 +106,12 @@ class BaseWidget extends VisualItem
     {
         $this->setValue($model);
         $descriptionHtml = empty($description) ? '' : '<small class="form-text text-muted">' . static::$i18n->trans($description) . '</small>';
-        $inputHtml = $this->inputHtml();
         $labelHtml = '<label>' . $this->onclickHtml(static::$i18n->trans($title), $titleurl) . '</label>';
 
         if (empty($this->icon)) {
             return '<div class="form-group">'
                 . $labelHtml
-                . $inputHtml
+                . $this->inputHtml()
                 . $descriptionHtml
                 . '</div>';
         }
@@ -123,7 +122,7 @@ class BaseWidget extends VisualItem
             . '<div class="' . $this->css('input-group-prepend') . '">'
             . '<span class="input-group-text"><i class="' . $this->icon . ' fa-fw"></i></span>'
             . '</div>'
-            . $inputHtml
+            . $this->inputHtml()
             . '</div>'
             . $descriptionHtml
             . '</div>';
@@ -137,6 +136,15 @@ class BaseWidget extends VisualItem
     public function getType()
     {
         return $this->type;
+    }
+
+    /**
+     * 
+     * @return array
+     */
+    public function gridFormat()
+    {
+        return [];
     }
 
     /**
@@ -174,6 +182,25 @@ class BaseWidget extends VisualItem
     }
 
     /**
+     * Set custom fixed value to widget
+     * 
+     * @param mixed $value
+     */
+    public function setCustomValue($value)
+    {
+        $this->value = $value;
+    }
+
+    /**
+     * 
+     * @return bool
+     */
+    public function showTableTotals(): bool
+    {
+        return false;
+    }
+
+    /**
      *
      * @param object $model
      * @param string $display
@@ -183,8 +210,8 @@ class BaseWidget extends VisualItem
     public function tableCell($model, $display = 'left')
     {
         $this->setValue($model);
-        $class = 'text-' . $display;
-        return '<td class="' . $this->tableCellClass($class) . '">' . $this->onclickHtml($this->show()) . '</td>';
+        $class = $this->combineClasses($this->tableCellClass('text-' . $display), $this->class);
+        return '<td class="' . $class . '">' . $this->onclickHtml($this->show()) . '</td>';
     }
 
     /**
@@ -204,8 +231,7 @@ class BaseWidget extends VisualItem
      */
     protected function inputHtml($type = 'text', $extraClass = '')
     {
-        $cssFormControl = $this->css('form-control');
-        $class = empty($extraClass) ? $cssFormControl : $cssFormControl . ' ' . $extraClass;
+        $class = $this->combineClasses($this->css('form-control'), $this->class, $extraClass);
         return '<input type="' . $type . '" name="' . $this->fieldname . '" value="' . $this->value
             . '" class="' . $class . '"' . $this->inputHtmlExtraParams() . '/>';
     }
@@ -230,7 +256,7 @@ class BaseWidget extends VisualItem
     {
         foreach ($children as $child) {
             if ($child['tag'] === 'option') {
-                $child['text'] = html_entity_decode($child['text']);
+                $child['text'] = \html_entity_decode($child['text']);
                 $this->options[] = $child;
             }
         }
@@ -245,11 +271,11 @@ class BaseWidget extends VisualItem
      */
     protected function onclickHtml($inside, $titleurl = '')
     {
-        if (empty($this->onclick) || is_null($this->value)) {
+        if (empty($this->onclick) || \is_null($this->value)) {
             return empty($titleurl) ? $inside : '<a href="' . $titleurl . '">' . $inside . '</a>';
         }
 
-        return '<a href="' . FS_ROUTE . '/' . $this->onclick . '?code=' . rawurlencode($this->value)
+        return '<a href="' . \FS_ROUTE . '/' . $this->onclick . '?code=' . \rawurlencode($this->value)
             . '" class="cancelClickable">' . $inside . '</a>';
     }
 
@@ -281,7 +307,7 @@ class BaseWidget extends VisualItem
      */
     protected function show()
     {
-        return is_null($this->value) ? '-' : (string) $this->value;
+        return \is_null($this->value) ? '-' : (string) $this->value;
     }
 
     /**
@@ -301,13 +327,13 @@ class BaseWidget extends VisualItem
             }
         }
 
-        $class = [$initialClass];
+        $class = [\trim($initialClass)];
         if (!empty($alternativeClass)) {
             $class[] = $alternativeClass;
-        } elseif (is_null($this->value)) {
-            $class[] = $this->colorToClass('warning', 'table-');
+        } elseif (\is_null($this->value)) {
+            $class[] = $this->colorToClass('warning', 'text-');
         }
 
-        return implode(' ', $class);
+        return \implode(' ', $class);
     }
 }

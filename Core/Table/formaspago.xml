@@ -25,18 +25,13 @@
         <type>boolean</type>
     </column>
     <column>
-        <name>genrecibos</name>
-        <type>character varying(10)</type>
-        <null>NO</null>
-    </column>
-    <column>
         <name>idempresa</name>
         <type>integer</type>
     </column>
     <column>
-        <name>imprimir</name>
+        <name>pagado</name>
         <type>boolean</type>
-        <default>true</default>
+        <default>false</default>
     </column>
     <column>
         <name>plazovencimiento</name>

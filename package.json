@@ -1,7 +1,6 @@
 {
   "name": "facturascripts",
-  "version": "1.0.0",
-  "description": "Open source ERP software. Built on PHP, symfony componentes and bootstrap 4. Easy and powerful.",
+  "description": "Open source ERP software. Built on modern PHP and bootstrap 4. Easy and powerful.",
   "main": "index.php",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -22,17 +21,17 @@
   "author": "Carlos García Gómez",
   "license": "LGPL-3.0",
   "bugs": {
-    "url": "https://www.facturascripts.com/contacto"
+    "url": "https://facturascripts.com/contacto"
   },
-  "homepage": "https://www.facturascripts.com",
+  "homepage": "https://facturascripts.com",
   "dependencies": {
-    "@fortawesome/fontawesome-free": "^5.x",
-    "bootbox": "^4.x",
-    "bootstrap": "^4.x",
-    "chart.js": "^2.8.x",
-    "handsontable": "^6.x",
-    "jquery": "^3.x",
-    "jquery-ui-dist": "^1.12.x",
-    "popper.js": "^1.x"
+    "@fortawesome/fontawesome-free": "5.*",
+    "bootbox": "5.*",
+    "bootstrap": "4.*",
+    "chart.js": "2.*",
+    "handsontable": "6.*",
+    "jquery": "3.5.*",
+    "jquery-ui-dist": "1.12.*",
+    "pace-js": "1.*"
   }
 }

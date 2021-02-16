@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
  * This file is part of FacturaScripts
- * Copyright (C) 2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2019-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -25,7 +25,7 @@
             <column name="id" display="none" order="100">
                 <widget type="text" fieldname="idsecuencia" readonly="dinamic" />
             </column>
-            <column name="doc-type" numcolumns="3" order="110">
+            <column name="doc-type" order="110">
                 <widget type="select" fieldname="tipodoc" translate="true" required="true">
                     <values title="customer-estimation">PresupuestoCliente</values>
                     <values title="customer-order">PedidoCliente</values>
@@ -35,35 +35,39 @@
                     <values title="supplier-order">PedidoProveedor</values>
                     <values title="supplier-delivery-note">AlbaranProveedor</values>
                     <values title="supplier-invoice">FacturaProveedor</values>
-                    <values title="service">Servicio</values>
                 </widget>
             </column>
-            <column name="company" numcolumns="3" order="120">
+            <column name="company" titleurl="ListEmpresa" order="120">
                 <widget type="select" fieldname="idempresa" icon="fas fa-building" onclick="EditEmpresa" required="true" readonly="dinamic">
-                    <values source="empresas" fieldcode="idempresa" fieldtitle="nombre"></values>
+                    <values source="empresas" fieldcode="idempresa" fieldtitle="nombrecorto" />
                 </widget>
             </column>
-            <column name="exercise" numcolumns="3" order="130">
+            <column name="exercise" titleurl="ListEjercicio" order="130">
                 <widget type="select" fieldname="codejercicio" onclick="EditEjercicio">
-                    <values source="ejercicios" fieldcode="codejercicio" fieldtitle="nombre"></values>
+                    <values source="ejercicios" fieldcode="codejercicio" fieldtitle="nombre" />
                 </widget>
             </column>
-            <column name="serie" numcolumns="3" order="140">
+            <column name="serie" titleurl="ListSerie" order="140">
                 <widget type="select" fieldname="codserie" onclick="EditSerie" required="true">
-                    <values source="series" fieldcode="codserie" fieldtitle="descripcion"></values>
+                    <values source="series" fieldcode="codserie" fieldtitle="descripcion" />
                 </widget>
             </column>
-            <column name="number" numcolumns="2" order="150" required="true">
-                <widget type="number" fieldname="numero" decimal="0" min="1" />
+        </group>
+        <group name="number" valign="bottom" numcolumns="12">
+            <column name="number" numcolumns="2" order="100">
+                <widget type="number" fieldname="numero" decimal="0" min="1" required="true" />
             </column>
-            <column name="number-length" numcolumns="2" order="160" required="true">
-                <widget type="number" fieldname="longnumero" decimal="0" min="1" />
+            <column name="number-length" numcolumns="2" order="110">
+                <widget type="number" fieldname="longnumero" decimal="0" min="1" required="true" />
             </column>
-            <column name="pattern" numcolumns="4" order="170" required="true">
-                <widget type="text" fieldname="patron" maxlength="30" />
+            <column name="initial-number" numcolumns="2" order="120">
+                <widget type="number" fieldname="inicio" decimal="0" min="1" required="true" />
             </column>
-            <column name="title" numcolumns="4" order="180">
-                <widget type="text" fieldname="titulo" maxlength="50" />
+            <column name="use-gaps" numcolumns="2" order="130">
+                <widget type="checkbox" fieldname="usarhuecos" />
+            </column>
+            <column name="pattern" order="140">
+                <widget type="text" fieldname="patron" maxlength="30" required="true" />
             </column>
         </group>
     </columns>

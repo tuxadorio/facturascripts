@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -17,9 +17,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 namespace FacturaScripts\Core\Model;
-
-use FacturaScripts\Core\App\AppSettings;
-use FacturaScripts\Core\Base\Utils;
 
 /**
  * A series of invoicing or accounting, to have different numbering
@@ -75,6 +72,21 @@ class Serie extends Base\ModelClass
     }
 
     /**
+     * Removed payment method from database.
+     * 
+     * @return bool
+     */
+    public function delete()
+    {
+        if ($this->isDefault()) {
+            $this->toolBox()->i18nLog()->warning('cant-delete-default-serie');
+            return false;
+        }
+
+        return parent::delete();
+    }
+
+    /**
      * 
      * @return string
      */
@@ -87,13 +99,13 @@ class Serie extends Base\ModelClass
     }
 
     /**
-     * Returns True if is the default serie for the company.
+     * Returns True if this is the default serie.
      *
      * @return bool
      */
     public function isDefault()
     {
-        return $this->codserie === AppSettings::get('default', 'codserie');
+        return $this->codserie === $this->toolBox()->appSettings()->get('default', 'codserie');
     }
 
     /**
@@ -123,19 +135,31 @@ class Serie extends Base\ModelClass
      */
     public function test()
     {
-        $this->codserie = trim($this->codserie);
-        $this->descripcion = Utils::noHtml($this->descripcion);
-
-        if (!preg_match('/^[A-Z0-9]{1,4}$/i', $this->codserie)) {
-            self::$miniLog->alert(self::$i18n->trans('invalid-column-lenght', ['%column%' => 'codserie', '%min%' => '1', '%max%' => '4']));
+        $this->codserie = \trim($this->codserie);
+        if ($this->codserie && 1 !== \preg_match('/^[A-Z0-9_\+\.\-]{1,4}$/i', $this->codserie)) {
+            $this->toolBox()->i18nLog()->error(
+                'invalid-alphanumeric-code',
+                ['%value%' => $this->codserie, '%column%' => 'codserie', '%min%' => '1', '%max%' => '4']
+            );
             return false;
         }
 
-        if (strlen($this->descripcion) < 1 || strlen($this->descripcion) > 100) {
-            self::$miniLog->alert(self::$i18n->trans('invalid-column-lenght', ['%column%' => 'descripcion', '%min%' => '1', '%max%' => '100']));
-            return false;
-        }
-
+        $this->descripcion = $this->toolBox()->utils()->noHtml($this->descripcion);
         return parent::test();
+    }
+
+    /**
+     * 
+     * @param array $values
+     *
+     * @return bool
+     */
+    protected function saveInsert(array $values = [])
+    {
+        if (empty($this->codserie)) {
+            $this->codserie = (string) $this->newCode();
+        }
+
+        return parent::saveInsert($values);
     }
 }

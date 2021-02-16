@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -24,39 +24,24 @@ use FacturaScripts\Core\Model\CronJob;
 /**
  * Defines global attributes and methos for all classes.
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
+ * @author Carlos García Gómez      <carlos@facturascripts.com>
  * @author Rafael San José Tovar
  */
 abstract class CronClass
 {
 
     /**
-     * Cache object.
-     *
-     * @var Cache
-     */
-    protected static $cache;
-
-    /**
      * Database object.
      *
      * @var DataBase
      */
-    protected static $dataBase;
+    protected $dataBase;
 
     /**
-     * Translator object.
      *
-     * @var Translator
+     * @var int
      */
-    protected static $i18n;
-
-    /**
-     * MiniLog object.
-     *
-     * @var MiniLog
-     */
-    protected static $miniLog;
+    private $init;
 
     /**
      *
@@ -78,13 +63,11 @@ abstract class CronClass
      */
     public function __construct(string $pluginName)
     {
+        $this->dataBase = new DataBase();
         $this->pluginName = $pluginName;
-        if (!isset(self::$cache)) {
-            self::$cache = new Cache();
-            self::$dataBase = new DataBase();
-            self::$i18n = new Translator();
-            self::$miniLog = new MiniLog();
-        }
+
+        /// initialize duration counter
+        $this->init = microtime(true);
     }
 
     /**
@@ -98,10 +81,13 @@ abstract class CronClass
      */
     public function isTimeForJob(string $jobName, string $period = '1 day')
     {
+        /// initialize duration counter
+        $this->init = microtime(true);
+
         $cronJob = new CronJob();
         $where = [
             new DataBaseWhere('pluginname', $this->pluginName),
-            new DataBaseWhere('jobname', $jobName),
+            new DataBaseWhere('jobname', $jobName)
         ];
 
         /// if we can't find it, then is the first time
@@ -110,7 +96,7 @@ abstract class CronClass
         }
 
         /// last time was before period?
-        if (strtotime($cronJob->date) < strtotime('-' . $period)) {
+        if ($cronJob->enabled && strtotime($cronJob->date) < strtotime('-' . $period)) {
             /// updates date and return true (if no error)
             $cronJob->date = date('d-m-Y H:i:s');
             $cronJob->done = false;
@@ -140,8 +126,18 @@ abstract class CronClass
 
         $cronJob->date = date('d-m-Y H:i:s');
         $cronJob->done = true;
+        $cronJob->duration = microtime(true) - $this->init;
         if (!$cronJob->save()) {
-            self::$miniLog->error(self::$i18n->trans('record-save-error'));
+            $this->toolBox()->i18nLog('cron')->error('record-save-error');
         }
+    }
+
+    /**
+     * 
+     * @return ToolBox
+     */
+    protected function toolBox()
+    {
+        return new ToolBox();
     }
 }

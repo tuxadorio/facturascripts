@@ -45,6 +45,21 @@ class RowFooter extends VisualItem
     }
 
     /**
+     * Adds a new button.
+     *
+     * @param array $btnArray
+     */
+    public function addButton($btnArray)
+    {
+        if (!isset($btnArray['tag'])) {
+            $btnArray['tag'] = 'button';
+        }
+
+        $group = $btnArray['row'];
+        $this->children[$group]['children'][] = $btnArray;
+    }
+
+    /**
      *
      * @param string $viewName
      * @param string $jsFunction
@@ -117,7 +132,7 @@ class RowFooter extends VisualItem
         $class = isset($group['class']) ? ' ' . $group['class'] : '';
         $divID = empty($group['id']) ? '' : ' id="' . $group['id'] . '"';
         $html = '<div' . $divID . ' class="' . $colClass . $class . '">'
-            . '<div class="card">'
+            . '<div class="card shadow">'
             . $this->renderCardHeader($group)
             . '<div class="card-body">';
 

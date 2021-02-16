@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -23,10 +23,16 @@ use FacturaScripts\Core\Base\Translator;
 /**
  * Description of VisualItem
  *
- * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Carlos García Gómez <carlos@facturascripts.com>
  */
 class VisualItem
 {
+
+    /**
+     *
+     * @var string
+     */
+    public $class;
 
     /**
      *
@@ -70,12 +76,13 @@ class VisualItem
             static::$i18n = new Translator();
         }
 
+        $this->class = $data['class'] ?? '';
         $this->id = $data['id'] ?? '';
         $this->name = $data['name'] ?? '';
     }
 
     /**
-     * 
+     *
      * @return int
      */
     public static function getLevel()
@@ -84,7 +91,7 @@ class VisualItem
     }
 
     /**
-     * 
+     *
      * @param int $new
      */
     public static function setLevel($new)
@@ -106,6 +113,14 @@ class VisualItem
             case 'dark':
             case 'info':
             case 'light':
+            case 'outline-danger':
+            case 'outline-dark':
+            case 'outline-info':
+            case 'outline-light':
+            case 'outline-primary':
+            case 'outline-secondary':
+            case 'outline-success':
+            case 'outline-warning':
             case 'primary':
             case 'secondary':
             case 'success':
@@ -127,35 +142,80 @@ class VisualItem
      */
     public function getColorFromOption($option, $value, $prefix): string
     {
-        $apply = false;
-        $color = '';
-        switch ($option['text'][0]) {
-            case '<':
-                $matchValue = substr($option['text'], 1);
-                $apply = ((float) $value < (float) $matchValue);
-                break;
+        return $this->applyOperatorFromOption($option, $value) ? $this->colorToClass($option['color'], $prefix) : '';
+    }
 
-            case '>':
-                $matchValue = substr($option['text'], 1);
-                $apply = ((float) $value > (float) $matchValue);
+    /**
+     *
+     * @param string[] $option
+     * @param mixed    $value
+     *
+     * @return boolean
+     */
+    protected function applyOperatorFromOption($option, $value)
+    {
+        $text = $option['text'] ?? '';
+
+        $applyOperator = '';
+        $operators = ['>', 'gt:', 'gte:', '<', 'lt:', 'lte:', '!', 'neq:', 'like:', 'null:', 'notnull:'];
+        foreach ($operators as $operator) {
+            if (0 === \strpos($text, $operator)) {
+                $applyOperator = $operator;
                 break;
+            }
+        }
+
+        $matchValue = \substr($text, \strlen($applyOperator));
+        $apply = $matchValue == $value;
+
+        switch ($applyOperator) {
+            case '>':
+            case 'gt:':
+                return (float) $value > (float) $matchValue;
+
+            case 'gte:':
+                return (float) $value >= (float) $matchValue;
+
+            case '<':
+            case 'lt:':
+                return (float) $value < (float) $matchValue;
+
+            case 'lte:':
+                return (float) $value <= (float) $matchValue;
 
             case '!':
-                $matchValue = substr($option['text'], 1);
-                $apply = ($matchValue != $value);
-                break;
+            case 'neq:':
+                return $value != $matchValue;
 
-            default:
-                $matchValue = $option['text'] ?? '';
-                $apply = ($matchValue == $value);
-                break;
+            case 'like:':
+                return false !== \stripos($value, $matchValue);
+
+            case 'null:':
+                return null === $value;
+
+            case 'notnull:':
+                return null !== $value;
         }
 
-        if ($apply) {
-            $color = $this->colorToClass($option['color'], $prefix);
+        return $apply;
+    }
+
+    /**
+     * 
+     * @param array $classes
+     *
+     * @return string
+     */
+    protected function combineClasses(...$classes): string
+    {
+        $mix = [];
+        foreach ($classes as $class) {
+            if (!empty($class)) {
+                $mix[] = $class;
+            }
         }
 
-        return $color;
+        return \implode(' ', $mix);
     }
 
     /**

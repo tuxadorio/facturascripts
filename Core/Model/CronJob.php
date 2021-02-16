@@ -18,8 +18,6 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\Base\Utils;
-
 /**
  * Class to store log information when a plugin is executed from cron.
  *
@@ -43,6 +41,18 @@ class CronJob extends Base\ModelClass
      * @var bool
      */
     public $done;
+
+    /**
+     *
+     * @var float
+     */
+    public $duration;
+
+    /**
+     *
+     * @var bool
+     */
+    public $enabled;
 
     /**
      * Primary key.
@@ -71,8 +81,10 @@ class CronJob extends Base\ModelClass
     public function clear()
     {
         parent::clear();
-        $this->date = date('d-m-Y H:i:s');
+        $this->date = \date(self::DATETIME_STYLE);
         $this->done = false;
+        $this->duration = 0.0;
+        $this->enabled = true;
     }
 
     /**
@@ -102,8 +114,9 @@ class CronJob extends Base\ModelClass
      */
     public function test()
     {
-        $this->jobname = Utils::noHtml($this->jobname);
-        $this->pluginname = Utils::noHtml($this->pluginname);
+        $utils = $this->toolBox()->utils();
+        $this->jobname = $utils->noHtml($this->jobname);
+        $this->pluginname = $utils->noHtml($this->pluginname);
         return parent::test();
     }
 

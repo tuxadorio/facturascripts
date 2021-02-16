@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,10 +18,9 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\App\AppSettings;
 use FacturaScripts\Core\Base\Controller;
 use FacturaScripts\Core\Base\ControllerPermissions;
-use FacturaScripts\Dinamic\Lib\EmailTools;
+use FacturaScripts\Dinamic\Lib\Email\NewMail;
 use FacturaScripts\Dinamic\Model\Cliente;
 use FacturaScripts\Dinamic\Model\CodeModel;
 use FacturaScripts\Dinamic\Model\Contacto;
@@ -39,13 +38,9 @@ use Symfony\Component\HttpFoundation\Response;
 class SendMail extends Controller
 {
 
+    /// 2 hours
     const MAX_FILE_AGE = 7200;
-
-    /**
-     *
-     * @var string
-     */
-    public $address;
+    const MODEL_NAMESPACE = '\\FacturaScripts\\Dinamic\\Model\\';
 
     /**
      * Model to use with select and autocomplete filters.
@@ -55,19 +50,24 @@ class SendMail extends Controller
     public $codeModel;
 
     /**
+     *
+     * @var NewMail
+     */
+    public $newMail;
+
+    /**
      * Return the basic data for this page.
      *
      * @return array
      */
     public function getPageData()
     {
-        $pageData = parent::getPageData();
-        $pageData['menu'] = 'reports';
-        $pageData['title'] = 'send-mail';
-        $pageData['icon'] = 'fas fa-envelope';
-        $pageData['showonmenu'] = false;
-
-        return $pageData;
+        $data = parent::getPageData();
+        $data['menu'] = 'sales';
+        $data['title'] = 'send-mail';
+        $data['icon'] = 'fas fa-envelope';
+        $data['showonmenu'] = false;
+        return $data;
     }
 
     /**
@@ -80,11 +80,12 @@ class SendMail extends Controller
     public function privateCore(&$response, $user, $permissions)
     {
         parent::privateCore($response, $user, $permissions);
-        $this->address = $this->getEmailAddress();
+        $this->codeModel = new CodeModel();
+        $this->newMail = new NewMail();
 
         /// Check if the email is configurate
-        if (AppSettings::get('email', 'host', '') == "") {
-            $this->miniLog->alert($this->i18n->trans('email-not-configured'));
+        if (false === $this->newMail->canSendMail()) {
+            $this->toolBox()->i18nLog()->warning('email-not-configured');
         }
 
         $action = $this->request->get('action', '');
@@ -108,7 +109,7 @@ class SendMail extends Controller
             $sendParams['modelCode'] = $this->request->get('modelCode');
         }
 
-        return parent::url() . '?' . http_build_query($sendParams);
+        return parent::url() . '?' . \http_build_query($sendParams);
     }
 
     /**
@@ -122,7 +123,7 @@ class SendMail extends Controller
         $results = [];
 
         $data = $this->requestGet(['source', 'field', 'title', 'term']);
-        foreach ($this->codeModel::search($data['source'], $data['field'], $data['title'], $data['term']) as $value) {
+        foreach ($this->codeModel->search($data['source'], $data['field'], $data['title'], $data['term']) as $value) {
             $results[] = ['key' => $value->code, 'value' => $value->description];
         }
 
@@ -139,57 +140,26 @@ class SendMail extends Controller
         switch ($action) {
             case 'autocomplete':
                 $this->setTemplate(false);
-                $this->codeModel = new CodeModel();
-                $results = $this->autocompleteAction();
-                $this->response->setContent(json_encode($results));
+                $data = $this->autocompleteAction();
+                $this->response->setContent(json_encode($data));
                 break;
 
             case 'send':
-                $this->send();
+                if ($this->send()) {
+                    $this->toolBox()->i18nLog()->notice('send-mail-ok');
+                    $this->updateFemail();
+                    $this->redirAfter();
+                    break;
+                }
+                $this->toolBox()->i18nLog()->error('send-mail-error');
                 break;
 
             default:
                 $this->removeOld();
+                $this->setEmailAddress();
+                $this->setAttachment();
                 break;
         }
-    }
-
-    /**
-     * 
-     * @return string
-     */
-    protected function getEmailAddress()
-    {
-        $className = '\FacturaScripts\Dinamic\Model\\' . $this->request->get('modelClassName', '');
-        if (!class_exists($className)) {
-            return '';
-        }
-
-        $model = new $className();
-        $model->loadFromCode($this->request->get('modelCode', ''));
-        if (property_exists($model, 'email')) {
-            return $model->email;
-        }
-
-        if (property_exists($model, 'codproveedor')) {
-            $proveedor = new Proveedor();
-            $proveedor->loadFromCode($model->codproveedor);
-            return $proveedor->email;
-        }
-
-        if (property_exists($model, 'idcontactofact')) {
-            $contact = new Contacto();
-            $contact->loadFromCode($model->idcontactofact);
-            if (!empty($contact->email)) {
-                return $contact->email;
-            }
-
-            $cliente = new Cliente();
-            $cliente->loadFromCode($model->codcliente);
-            return $cliente->email;
-        }
-
-        return '';
     }
 
     /**
@@ -201,16 +171,25 @@ class SendMail extends Controller
      */
     protected function getEmails(string $field): array
     {
-        $emails = [];
+        return NewMail::splitEmails($this->request->request->get($field, ''));
+    }
 
-        $string = trim($this->request->request->get($field, ''));
-        foreach (explode(',', $string) as $email) {
-            if (!empty($email)) {
-                $emails[] = $email;
-            }
+    /**
+     * 
+     */
+    protected function redirAfter()
+    {
+        $className = self::MODEL_NAMESPACE . $this->request->get('modelClassName');
+        if (false === \class_exists($className)) {
+            return;
         }
 
-        return $emails;
+        $model = new $className();
+        $modelCode = $this->request->get('modelCode');
+        if ($model->loadFromCode($modelCode) && property_exists($className, 'femail')) {
+            $this->toolBox()->i18nLog()->notice('reloading');
+            $this->redirect($model->url(), 3);
+        }
     }
 
     /**
@@ -218,12 +197,11 @@ class SendMail extends Controller
      */
     protected function removeOld()
     {
-        $regex = '/Mail_([0-9]+).pdf/';
-        foreach (glob(FS_FOLDER . '/MyFiles/Mail_*.pdf') as $fileName) {
-            $fileTime = [];
-            preg_match($regex, $fileName, $fileTime);
-            if ($fileTime[1] < (time() - self::MAX_FILE_AGE)) {
-                unlink($fileName);
+        foreach (\glob(\FS_FOLDER . '/MyFiles/*_mail_*.pdf') as $fileName) {
+            $parts = \explode('_', $fileName);
+            $time = (int) \substr(end($parts), 0, -4);
+            if ($time < (\time() - self::MAX_FILE_AGE)) {
+                \unlink($fileName);
             }
         }
     }
@@ -247,39 +225,81 @@ class SendMail extends Controller
 
     /**
      * Send and email with data posted from form.
+     * 
+     * @return bool
      */
     protected function send()
     {
-        $emailTools = new EmailTools();
-        $mail = $emailTools->newMail();
-        $mail->Subject = $this->request->request->get('subject', '');
-        $mail->msgHTML($this->request->request->get('body', ''));
+        $this->newMail->fromNick = $this->user->nick;
+        $this->newMail->addReplyTo($this->user->email, $this->user->nick);
+
+        $this->newMail->title = $this->request->request->get('subject', '');
+        $this->newMail->text = $this->request->request->get('body', '');
+
+        $this->newMail->setMailbox($this->request->request->get('email-from', ''));
 
         foreach ($this->getEmails('email') as $email) {
-            $mail->addAddress($email);
+            $this->newMail->addAddress($email);
         }
         foreach ($this->getEmails('email-cc') as $email) {
-            $mail->addCC($email);
+            $this->newMail->addCC($email);
         }
         foreach ($this->getEmails('email-bcc') as $email) {
-            $mail->addBCC($email);
+            $this->newMail->addBCC($email);
         }
 
-        $fileName = $this->request->get('fileName', '');
-        $mail->addAttachment(FS_FOLDER . '/MyFiles/' . $fileName);
+        $this->setAttachment();
         foreach ($this->request->files->get('uploads', []) as $file) {
-            $mail->addAttachment($file->getPathname(), $file->getClientOriginalName());
+            $this->newMail->addAttachment($file->getPathname(), $file->getClientOriginalName());
         }
 
-        if ($emailTools->send($mail)) {
-            if (\file_exists(FS_FOLDER . '/MyFiles/' . $fileName)) {
-                unlink(FS_FOLDER . '/MyFiles/' . $fileName);
+        if ($this->newMail->send()) {
+            $fileName = $this->request->get('fileName', '');
+            if (\file_exists(\FS_FOLDER . '/MyFiles/' . $fileName)) {
+                \unlink(\FS_FOLDER . '/MyFiles/' . $fileName);
             }
 
-            $this->updateFemail();
-            $this->miniLog->notice($this->i18n->trans('send-mail-ok'));
-        } else {
-            $this->miniLog->error($this->i18n->trans('send-mail-error'));
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function setAttachment()
+    {
+        $fileName = $this->request->get('fileName', '');
+        $this->newMail->addAttachment(\FS_FOLDER . '/MyFiles/' . $fileName, $fileName);
+    }
+
+    protected function setEmailAddress()
+    {
+        $className = self::MODEL_NAMESPACE . $this->request->get('modelClassName', '');
+        if (false === \class_exists($className)) {
+            return;
+        }
+
+        $model = new $className();
+        $model->loadFromCode($this->request->get('modelCode', ''));
+        if (\property_exists($model, 'email')) {
+            $this->newMail->addAddress($model->email);
+            return;
+        }
+
+        $proveedor = new Proveedor();
+        if (\property_exists($model, 'codproveedor') && $proveedor->loadFromCode($model->codproveedor) && $proveedor->email) {
+            $this->newMail->addAddress($proveedor->email, $proveedor->razonsocial);
+            return;
+        }
+
+        $contact = new Contacto();
+        if (\property_exists($model, 'idcontactofact') && $contact->loadFromCode($model->idcontactofact) && $contact->email) {
+            $this->newMail->addAddress($contact->email, $contact->fullName());
+            return;
+        }
+
+        $cliente = new Cliente();
+        if (\property_exists($model, 'codcliente') && $cliente->loadFromCode($model->codcliente) && $cliente->email) {
+            $this->newMail->addAddress($cliente->email, $cliente->razonsocial);
         }
     }
 
@@ -288,17 +308,17 @@ class SendMail extends Controller
      */
     protected function updateFemail()
     {
-        $className = '\FacturaScripts\Dinamic\Model\\' . $this->request->get('modelClassName');
-        if (!class_exists($className)) {
+        $className = self::MODEL_NAMESPACE . $this->request->get('modelClassName');
+        if (false === \class_exists($className)) {
             return;
         }
 
         $model = new $className();
         $modelCode = $this->request->get('modelCode');
-        if ($model->loadFromCode($modelCode) && property_exists($className, 'femail')) {
-            $model->femail = date('d-m-Y');
-            if (!$model->save()) {
-                $this->miniLog->alert($this->i18n->trans('error-saving-data'));
+        if ($model->loadFromCode($modelCode) && \property_exists($className, 'femail')) {
+            $model->femail = \date(Cliente::DATE_STYLE);
+            if (false === $model->save()) {
+                $this->toolBox()->i18nLog()->error('error-saving-data');
             }
         }
     }

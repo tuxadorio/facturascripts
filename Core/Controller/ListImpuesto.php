@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,7 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\ListController;
 use FacturaScripts\Dinamic\Model\Impuesto;
 use FacturaScripts\Dinamic\Model\ImpuestoZona;
 
@@ -29,7 +29,7 @@ use FacturaScripts\Dinamic\Model\ImpuestoZona;
  * @author Artex Trading sa         <jcuello@artextrading.com>
  * @author Rafael San José Tovar    <rafael.sanjose@x-netdigital.com>
  */
-class ListImpuesto extends ExtendedController\ListController
+class ListImpuesto extends ListController
 {
 
     /**
@@ -39,13 +39,11 @@ class ListImpuesto extends ExtendedController\ListController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['menu'] = 'accounting';
-        $pagedata['submenu'] = 'taxes';
-        $pagedata['title'] = 'taxes';
-        $pagedata['icon'] = 'fas fa-plus-square';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'accounting';
+        $data['title'] = 'taxes';
+        $data['icon'] = 'fas fa-plus-square';
+        return $data;
     }
 
     /**
@@ -53,79 +51,86 @@ class ListImpuesto extends ExtendedController\ListController
      */
     protected function createViews()
     {
-        $this->createViewTax();
-        $this->createViewTaxZone();
-        $this->createViewRetention();
+        $this->createViewsTax();
+        $this->createViewsTaxZone();
+        $this->createViewsRetention();
     }
 
     /**
      * 
-     * @param string $name
+     * @param string $viewName
      */
-    protected function createViewRetention($name = 'ListRetencion')
+    protected function createViewsRetention(string $viewName = 'ListRetencion')
     {
-        $this->addView($name, 'Retencion', 'retentions', 'fas fa-plus-square');
-        $this->addSearchFields($name, ['descripcion', 'codretencion']);
-        $this->addOrderBy($name, ['codretencion'], 'code');
-        $this->addOrderBy($name, ['descripcion'], 'description');
+        $this->addView($viewName, 'Retencion', 'retentions', 'fas fa-plus-square');
+        $this->addOrderBy($viewName, ['codretencion'], 'code');
+        $this->addOrderBy($viewName, ['descripcion'], 'description');
+        $this->addSearchFields($viewName, ['descripcion', 'codretencion']);
     }
 
     /**
      * 
-     * @param string $name
+     * @param string $viewName
      */
-    protected function createViewTax($name = 'ListImpuesto')
+    protected function createViewsTax(string $viewName = 'ListImpuesto')
     {
-        $this->addView($name, 'Impuesto', 'taxes', 'fas fa-plus-square');
-        $this->addSearchFields($name, ['descripcion', 'codimpuesto']);
-        $this->addOrderBy($name, ['codimpuesto'], 'code');
-        $this->addOrderBy($name, ['descripcion'], 'description');
+        $this->addView($viewName, 'Impuesto', 'taxes', 'fas fa-plus-square');
+        $this->addOrderBy($viewName, ['codimpuesto'], 'code');
+        $this->addOrderBy($viewName, ['descripcion'], 'description');
+        $this->addSearchFields($viewName, ['descripcion', 'codimpuesto']);
     }
 
     /**
      * 
-     * @param string $name
+     * @param string $viewName
      */
-    protected function createViewTaxZone($name = 'ListImpuestoZona')
+    protected function createViewsTaxZone(string $viewName = 'ListImpuestoZona')
     {
-        $this->addView($name, 'ImpuestoZona', 'tax-areas', 'fas fa-globe-americas');
-        $this->addSearchFields($name, ['codpais']);
-        $this->addOrderBy($name, ['prioridad'], 'priority', 2);
-        $this->addOrderBy($name, ['codimpuesto'], 'tax');
-        $this->addOrderBy($name, ['codpais'], 'country');
-        $this->addOrderBy($name, ['codisopro'], 'province');
-        $this->addOrderBy($name, ['codimpuestosel'], 'applied-tax');
+        $this->addView($viewName, 'ImpuestoZona', 'tax-areas', 'fas fa-globe-americas');
+        $this->addOrderBy($viewName, ['prioridad'], 'priority', 2);
+        $this->addOrderBy($viewName, ['codimpuesto'], 'tax');
+        $this->addOrderBy($viewName, ['codpais'], 'country');
+        $this->addOrderBy($viewName, ['codisopro'], 'province');
+        $this->addOrderBy($viewName, ['codimpuestosel'], 'applied-tax');
+        $this->addSearchFields($viewName, ['codpais']);
 
-        /// buttons
-        $button = [
+        /// adds generate button
+        $this->addButton($viewName, [
             'action' => 'generate-zones',
             'color' => 'warning',
+            'confirm' => true,
             'icon' => 'fas fa-magic',
-            'label' => 'generate',
-            'type' => 'action'
-        ];
-        $this->addButton($name, $button);
+            'label' => 'generate'
+        ]);
     }
 
+    /**
+     * 
+     * @param string $action
+     *
+     * @return bool
+     */
     protected function execPreviousAction($action)
     {
         switch ($action) {
             case 'generate-zones':
-                $this->generateTaxZones();
-                return true;
-
-            default:
-                return parent::execPreviousAction($action);
+                return $this->generateTaxZones();
         }
+
+        return parent::execPreviousAction($action);
     }
 
+    /**
+     * 
+     * @return bool
+     */
     protected function generateTaxZones()
     {
         $impuesto = new Impuesto();
         foreach ($impuesto->all() as $imp) {
             $impZona = new ImpuestoZona();
             $impZona->codimpuesto = $imp->codimpuesto;
-            $impZona->codpais = FS_CODPAIS;
+            $impZona->codpais = \FS_CODPAIS;
             $impZona->codisopro = null;
             $impZona->codimpuestosel = $imp->codimpuesto;
             $impZona->prioridad = 1;
@@ -138,5 +143,7 @@ class ListImpuesto extends ExtendedController\ListController
             $impZona2->prioridad = 0;
             $impZona2->save();
         }
+
+        return true;
     }
 }

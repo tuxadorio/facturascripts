@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,8 +19,8 @@
 namespace FacturaScripts\Core\Model;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Dinamic\Lib\Accounting\InvoiceToAccounting;
-use FacturaScripts\Dinamic\Model\LineaFacturaProveedor;
+use FacturaScripts\Dinamic\Model\LineaFacturaProveedor as DinLineaFactura;
+use FacturaScripts\Dinamic\Model\ReciboProveedor as DinReciboProveedor;
 
 /**
  * Invoice from a supplier.
@@ -34,30 +34,24 @@ class FacturaProveedor extends Base\PurchaseDocument
     use Base\InvoiceTrait;
 
     /**
-     * 
-     * @return bool
+     * Reset the values of all model properties.
      */
-    public function delete()
+    public function clear()
     {
-        $asiento = $this->getAccountingEntry();
-        if ($asiento->exists()) {
-            return $asiento->delete() ? parent::delete() : false;
-        }
-
-        return parent::delete();
+        parent::clear();
+        $this->pagada = false;
     }
 
     /**
      * Returns the lines associated with the invoice.
      *
-     * @return LineaFacturaProveedor[]
+     * @return DinLineaFactura[]
      */
     public function getLines()
     {
-        $lineaModel = new LineaFacturaProveedor();
+        $lineaModel = new DinLineaFactura();
         $where = [new DataBaseWhere('idfactura', $this->idfactura)];
         $order = ['orden' => 'DESC', 'idlinea' => 'ASC'];
-
         return $lineaModel->all($where, $order, 0, 0);
     }
 
@@ -65,46 +59,30 @@ class FacturaProveedor extends Base\PurchaseDocument
      * Returns a new line for the document.
      *
      * @param array $data
+     * @param array $exclude
      *
-     * @return LineaFacturaProveedor
+     * @return DinLineaFactura
      */
-    public function getNewLine(array $data = [])
+    public function getNewLine(array $data = [], array $exclude = ['actualizastock', 'idlinea', 'idfactura'])
     {
-        $newLine = new LineaFacturaProveedor($data);
+        $newLine = new DinLineaFactura();
         $newLine->idfactura = $this->idfactura;
-        if (empty($data)) {
-            $newLine->irpf = $this->irpf;
-        }
-
-        $status = $this->getStatus();
-        $newLine->actualizastock = $status->actualizastock;
-
+        $newLine->irpf = $this->irpf;
+        $newLine->actualizastock = $this->getStatus()->actualizastock;
+        $newLine->loadFromData($data, $exclude);
         return $newLine;
     }
 
     /**
-     * This function is called when creating the model table. Returns the SQL
-     * that will be executed after the creation of the table. Useful to insert values
-     * default.
-     *
-     * @return string
+     * Returns all invoice's receipts.
+     * 
+     * @return DinReciboProveedor[]
      */
-    public function install()
+    public function getReceipts()
     {
-        $sql = parent::install();
-        new Asiento();
-
-        return $sql;
-    }
-
-    /**
-     * Returns the name of the column that is the model's primary key.
-     *
-     * @return string
-     */
-    public static function primaryColumn()
-    {
-        return 'idfactura';
+        $receipt = new DinReciboProveedor();
+        $where = [new DataBaseWhere('idfactura', $this->idfactura)];
+        return $receipt->all($where, ['numero' => 'ASC', 'idrecibo' => 'ASC'], 0, 0);
     }
 
     /**
@@ -115,48 +93,5 @@ class FacturaProveedor extends Base\PurchaseDocument
     public static function tableName()
     {
         return 'facturasprov';
-    }
-
-    /**
-     * 
-     * @return bool
-     */
-    public function test()
-    {
-        if (empty($this->vencimiento)) {
-            $this->setPaymentMethod($this->codpago);
-        }
-
-        return parent::test();
-    }
-
-    /**
-     * 
-     * @param string $field
-     *
-     * @return bool
-     */
-    protected function onChange($field)
-    {
-        if (!parent::onChange($field)) {
-            return false;
-        }
-
-        switch ($field) {
-            case 'codpago':
-                $this->setPaymentMethod($this->codpago);
-                return true;
-
-            case 'total':
-                $asiento = $this->getAccountingEntry();
-                if ($asiento->exists() && $asiento->delete()) {
-                    $this->idasiento = null;
-                }
-                $tool = new InvoiceToAccounting();
-                $tool->generate($this);
-                return true;
-        }
-
-        return true;
     }
 }

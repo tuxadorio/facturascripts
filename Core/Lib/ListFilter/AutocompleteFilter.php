@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,8 +19,8 @@
 namespace FacturaScripts\Core\Lib\ListFilter;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Lib\AssetManager;
-use FacturaScripts\Core\Model\CodeModel;
+use FacturaScripts\Dinamic\Lib\AssetManager;
+use FacturaScripts\Dinamic\Model\CodeModel;
 
 /**
  * Description of AutocompleteFilter
@@ -96,7 +96,7 @@ class AutocompleteFilter extends BaseFilter
     public function render()
     {
         $label = static::$i18n->trans($this->label);
-        $html = '<div class="col-sm-2">'
+        $html = '<div class="col-sm-3 col-lg-2">'
             . '<input type="hidden" name="' . $this->name() . '" value="' . $this->value . '"/>'
             . '<div class="form-group">'
             . '<div class="input-group">';
@@ -130,7 +130,7 @@ class AutocompleteFilter extends BaseFilter
      */
     protected function assets()
     {
-        AssetManager::add('js', FS_ROUTE . '/Dinamic/Assets/JS/ListFilterAutocomplete.js');
+        AssetManager::add('js', \FS_ROUTE . '/Dinamic/Assets/JS/ListFilterAutocomplete.js');
     }
 
     /**

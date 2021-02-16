@@ -37,7 +37,6 @@
         <name>idasiento</name>
         <type>serial</type>
         <null>NO</null>
-        <default>nextval('asientos_idasiento_seq'::regclass)</default>
     </column>
     <column>
         <name>iddiario</name>
@@ -57,6 +56,10 @@
         <name>numero</name>
         <type>integer</type>
         <null>NO</null>
+    </column>
+    <column>
+        <name>operacion</name>
+        <type>character varying(1)</type>
     </column>
     <constraint>
         <name>asientos_pkey</name>

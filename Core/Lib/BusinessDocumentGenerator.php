@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,6 +19,7 @@
 namespace FacturaScripts\Core\Lib;
 
 use FacturaScripts\Core\Model\Base\BusinessDocument;
+use FacturaScripts\Core\Model\Base\BusinessDocumentLine;
 use FacturaScripts\Dinamic\Model\DocTransformation;
 
 /**
@@ -31,10 +32,35 @@ class BusinessDocumentGenerator
 {
 
     /**
+     * Document fields to exclude.
+     *
+     * @var array
+     */
+    public $excludeFields = [
+        'codejercicio', 'codigo', 'codigorect', 'fecha', 'femail', 'hora',
+        'idasiento', 'idestado', 'idfacturarect', 'neto', 'netosindto',
+        'numero', 'pagada', 'total', 'totalirpf', 'totaliva', 'totalrecargo',
+        'totalsuplidos'
+    ];
+
+    /**
+     * Line fields to exclude.
+     *
+     * @var array
+     */
+    public $excludeLineFields = ['idlinea', 'orden', 'servido'];
+
+    /**
      *
      * @var array
      */
     protected $lastDocs = [];
+
+    /**
+     *
+     * @var bool
+     */
+    private static $sameDate = false;
 
     /**
      * Generates a new document from a prototype document.
@@ -43,20 +69,20 @@ class BusinessDocumentGenerator
      * @param string           $newClass
      * @param array            $lines
      * @param array            $quantity
+     * @param array            $properties
      *
      * @return bool
      */
-    public function generate(BusinessDocument $prototype, string $newClass, $lines = [], $quantity = [])
+    public function generate(BusinessDocument $prototype, string $newClass, $lines = [], $quantity = [], $properties = [])
     {
-        $exclude = [
-            'codejercicio', 'codigo', 'fecha', 'femail', 'hora', 'idestado',
-            'neto', 'numero', 'total', 'totalirpf', 'totaliva', 'totalrecargo', $prototype->primaryColumn()
-        ];
+        // Add primary column to exclude fields
+        $this->excludeFields[] = $prototype->primaryColumn();
+
         $newDocClass = '\\FacturaScripts\\Dinamic\\Model\\' . $newClass;
         $newDoc = new $newDocClass();
-        foreach (array_keys($prototype->getModelFields()) as $field) {
+        foreach (\array_keys($prototype->getModelFields()) as $field) {
             /// exclude some properties
-            if (in_array($field, $exclude) || !property_exists($newDocClass, $field)) {
+            if (\in_array($field, $this->excludeFields)) {
                 continue;
             }
 
@@ -64,19 +90,25 @@ class BusinessDocumentGenerator
             $newDoc->{$field} = $prototype->{$field};
         }
 
-        /// sets date, hour and codejercicio
-        $newDoc->setDate($newDoc->fecha, $newDoc->hora);
+        if (self::$sameDate) {
+            $newDoc->fecha = $prototype->fecha;
+            $newDoc->hora = $prototype->hora;
+        }
+
+        foreach ($properties as $key => $value) {
+            $newDoc->{$key} = $value;
+        }
 
         $protoLines = empty($lines) ? $prototype->getLines() : $lines;
         if ($newDoc->save() && $this->cloneLines($prototype, $newDoc, $protoLines, $quantity)) {
             /// recalculate totals on new document
             $tool = new BusinessDocumentTools();
             $tool->recalculate($newDoc);
-            $newDoc->save();
-
-            /// add to last doc list
-            $this->lastDocs[] = $newDoc;
-            return true;
+            if ($newDoc->save()) {
+                /// add to last doc list
+                $this->lastDocs[] = $newDoc;
+                return true;
+            }
         }
 
         if ($newDoc->exists()) {
@@ -88,7 +120,7 @@ class BusinessDocumentGenerator
 
     /**
      * 
-     * @return array
+     * @return BusinessDocument[]
      */
     public function getLastDocs()
     {
@@ -96,23 +128,32 @@ class BusinessDocumentGenerator
     }
 
     /**
+     * 
+     * @param bool $value
+     */
+    public static function setSameDate(bool $value)
+    {
+        self::$sameDate = $value;
+    }
+
+    /**
      * Clone the lines from the prototype document, to new document.
      *
-     * @param BusinessDocument $prototype
-     * @param mixed            $newDoc
-     * @param array            $lines
-     * @param array            $quantity
+     * @param BusinessDocument       $prototype
+     * @param BusinessDocument       $newDoc
+     * @param BusinessDocumentLine[] $lines
+     * @param array                  $quantity
      *
      * @return bool
      */
-    private function cloneLines(BusinessDocument $prototype, $newDoc, $lines, $quantity)
+    protected function cloneLines(BusinessDocument $prototype, BusinessDocument $newDoc, $lines, $quantity)
     {
         $docTrans = new DocTransformation();
         foreach ($lines as $line) {
             /// copy line properties to new line
             $arrayLine = [];
-            foreach (array_keys($line->getModelFields()) as $field) {
-                if ($field !== 'idlinea') {
+            foreach (\array_keys($line->getModelFields()) as $field) {
+                if (\in_array($field, $this->excludeLineFields) === false) {
                     $arrayLine[$field] = $line->{$field};
                 }
             }
@@ -121,7 +162,7 @@ class BusinessDocumentGenerator
                 $arrayLine['cantidad'] = $quantity[$line->primaryColumnValue()];
             }
 
-            if ($arrayLine['cantidad'] == 0) {
+            if (empty($arrayLine['cantidad']) && !empty($line->cantidad)) {
                 continue;
             }
 
@@ -132,13 +173,14 @@ class BusinessDocumentGenerator
 
             /// save relation
             $docTrans->clear();
+            $docTrans->cantidad = $newLine->cantidad;
             $docTrans->model1 = $prototype->modelClassName();
             $docTrans->iddoc1 = $line->documentColumnValue();
             $docTrans->idlinea1 = $line->primaryColumnValue();
             $docTrans->model2 = $newDoc->modelClassName();
             $docTrans->iddoc2 = $newDoc->primaryColumnValue();
             $docTrans->idlinea2 = $newLine->primaryColumnValue();
-            if (!$docTrans->save()) {
+            if (!empty($line->primaryColumnValue()) && !$docTrans->save()) {
                 return false;
             }
         }

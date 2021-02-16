@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,8 +18,12 @@
  */
 namespace FacturaScripts\Core\Base;
 
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Dinamic\Lib\MenuItem;
-use FacturaScripts\Dinamic\Model;
+use FacturaScripts\Dinamic\Model\Page;
+use FacturaScripts\Dinamic\Model\RoleAccess;
+use FacturaScripts\Dinamic\Model\RoleUser;
+use FacturaScripts\Dinamic\Model\User;
 
 /**
  * Manage the use of the Facturascripts menu.
@@ -47,21 +51,21 @@ class MenuManager
     /**
      * Stores active page to use when reload.
      *
-     * @var Model\Page
+     * @var Page
      */
     private static $menuPageActive;
 
     /**
      * Controller associated with the page
      *
-     * @var Model\Page
+     * @var Page
      */
     private static $pageModel;
 
     /**
      * User for whom the menu has been created.
      *
-     * @var Model\User|false
+     * @var User|false
      */
     private static $user = false;
 
@@ -81,7 +85,7 @@ class MenuManager
     public function init()
     {
         if (self::$pageModel === null) {
-            self::$pageModel = new Model\Page();
+            self::$pageModel = new Page();
         }
 
         if (self::$user !== false && self::$menu === null) {
@@ -108,32 +112,27 @@ class MenuManager
     public function removeOld($currentPageNames)
     {
         foreach (self::$pageModel->all([], [], 0, 0) as $page) {
-            if (!in_array($page->name, $currentPageNames)) {
+            if (false === \in_array($page->name, $currentPageNames, true)) {
                 $page->delete();
             }
         }
     }
 
     /**
-     * Mark menu and menuitem as selected, and updates the data in the Model\Page
+     * Mark menu and menuitem as selected, and updates the data in the Page
      * model based on the data in the getPageData() of the controller.
      *
      * @param array $pageData
      */
     public function selectPage($pageData)
     {
-        $pageModel = self::$pageModel->get($pageData['name']);
-        if ($pageModel === false) {
+        $pageModel = new Page();
+        if (false === $pageModel->loadFromCode($pageData['name'])) {
             $pageData['ordernum'] = 100;
-            $pageModel = new Model\Page($pageData);
+            $pageModel = new Page($pageData);
             $pageModel->save();
         } elseif ($this->pageNeedSave($pageModel, $pageData)) {
-            $pageModel->menu = $pageData['menu'];
-            $pageModel->submenu = $pageData['submenu'];
-            $pageModel->showonmenu = $pageData['showonmenu'];
-            $pageModel->title = $pageData['title'];
-            $pageModel->icon = $pageData['icon'];
-            $pageModel->ordernum = $pageData['ordernum'];
+            $pageModel->loadFromData($pageData);
             $pageModel->save();
         }
 
@@ -146,7 +145,7 @@ class MenuManager
     /**
      * Assign the user to load their menu.
      *
-     * @param Model\User|false $user
+     * @param User|false $user
      */
     public function setUser($user)
     {
@@ -159,14 +158,14 @@ class MenuManager
      *
      * @param string $nick
      *
-     * @return Model\RoleAccess[]
+     * @return RoleAccess[]
      */
     private function getUserAccess($nick)
     {
         $access = [];
-        $roleUserModel = new Model\RoleUser();
-        $filter = [new DataBase\DataBaseWhere('nick', $nick)];
-        foreach ($roleUserModel->all($filter) as $roleUser) {
+        $roleUserModel = new RoleUser();
+        $filter = [new DataBaseWhere('nick', $nick)];
+        foreach ($roleUserModel->all($filter, [], 0, 0) as $roleUser) {
             foreach ($roleUser->getRoleAccess() as $roleAccess) {
                 $access[] = $roleAccess;
             }
@@ -178,16 +177,16 @@ class MenuManager
     /**
      * Load the list of pages for the user.
      *
-     * @return Model\Page[]
+     * @return Page[]
      */
     private function loadPages()
     {
-        $where = [new DataBase\DataBaseWhere('showonmenu', true)];
+        $where = [new DataBaseWhere('showonmenu', true)];
         $order = [
             'lower(menu)' => 'ASC',
             'lower(submenu)' => 'ASC',
             'ordernum' => 'ASC',
-            'lower(title)' => 'ASC',
+            'lower(title)' => 'ASC'
         ];
 
         $pages = self::$pageModel->all($where, $order, 0, 0);
@@ -217,7 +216,7 @@ class MenuManager
     private function loadUserMenu()
     {
         $result = [];
-        $menuValue = '';
+        $menuValue = null;
         $submenuValue = null;
         $menuItem = null;
         $i18n = new Translator();
@@ -225,7 +224,7 @@ class MenuManager
         /// We load the list of pages for the user
         $pages = $this->loadPages();
         foreach ($pages as $page) {
-            if ($page->menu === '') {
+            if (empty($page->menu)) {
                 continue;
             }
 
@@ -255,24 +254,24 @@ class MenuManager
     /**
      * Returns if the page should be saved.
      *
-     * @param Model\Page $pageModel
-     * @param array      $pageData
+     * @param Page  $pageModel
+     * @param array $pageData
      *
      * @return bool
      */
     private function pageNeedSave($pageModel, $pageData)
     {
-        return
-            ($pageModel->menu !== $pageData['menu']) || ($pageModel->submenu !== $pageData['submenu']) ||
-            ($pageModel->title !== $pageData['title']) || ($pageModel->icon !== $pageData['icon']) ||
-            ($pageModel->showonmenu !== $pageData['showonmenu'])
-        ;
+        return $pageModel->menu !== $pageData['menu'] ||
+            $pageModel->submenu !== $pageData['submenu'] ||
+            $pageModel->title !== $pageData['title'] ||
+            $pageModel->icon !== $pageData['icon'] ||
+            $pageModel->showonmenu !== $pageData['showonmenu'];
     }
 
     /**
      * Set the active menu.
      *
-     * @param Model\Page $pageModel
+     * @param Page $pageModel
      */
     private function setActiveMenu($pageModel)
     {
@@ -289,7 +288,7 @@ class MenuManager
      * Assign active menu item.
      *
      * @param MenuItem[] $menu
-     * @param Model\Page $pageModel
+     * @param Page       $pageModel
      */
     private function setActiveMenuItem(&$menu, $pageModel)
     {
@@ -316,8 +315,8 @@ class MenuManager
     private function sortMenu(&$result)
     {
         /// sort this menu
-        uasort($result, function ($menu1, $menu2) {
-            return strcasecmp($menu1->title, $menu2->title);
+        \uasort($result, function ($menu1, $menu2) {
+            return \strcasecmp($menu1->title, $menu2->title);
         });
 
         /// sort submenus

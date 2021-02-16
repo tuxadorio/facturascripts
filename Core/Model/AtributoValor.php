@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2015-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2015-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,7 +18,7 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Dinamic\Model\Atributo as DinAtributo;
 
 /**
  * A Value for an article attribute.
@@ -52,11 +52,47 @@ class AtributoValor extends Base\ModelClass
     public $id;
 
     /**
+     * Position for visualization and print
+     *
+     * @var int
+     */
+    public $orden;
+
+    /**
      * Value of the attribute
      *
      * @var string
      */
     public $valor;
+
+    /**
+     * Reset the values of all model properties.
+     */
+    public function clear()
+    {
+        parent::clear();
+        $this->orden = 100;
+    }
+
+    /**
+     * 
+     * @param string $fieldCode
+     *
+     * @return CodeModel[]
+     */
+    public function codeModelAll(string $fieldCode = '')
+    {
+        $results = [];
+        $field = empty($fieldCode) ? static::primaryColumn() : $fieldCode;
+
+        $sql = 'SELECT DISTINCT ' . $field . ' AS code, ' . $this->primaryDescriptionColumn() . ' AS description, codatributo, orden '
+            . 'FROM ' . static::tableName() . ' ORDER BY codatributo ASC, orden ASC';
+        foreach (self::$dataBase->selectLimit($sql, CodeModel::ALL_LIMIT) as $d) {
+            $results[] = new CodeModel($d);
+        }
+
+        return $results;
+    }
 
     /**
      * This function is called when creating the model table. Returns the SQL
@@ -67,7 +103,9 @@ class AtributoValor extends Base\ModelClass
      */
     public function install()
     {
-        new Atributo();
+        /// needed dependency
+        new DinAtributo();
+
         return parent::install();
     }
 
@@ -98,10 +136,10 @@ class AtributoValor extends Base\ModelClass
      */
     public function test()
     {
-        $this->valor = Utils::noHtml($this->valor);
+        $this->valor = $this->toolBox()->utils()->noHtml($this->valor);
 
         /// combine attribute name + value
-        $attribute = new Atributo();
+        $attribute = new DinAtributo();
         if ($attribute->loadFromCode($this->codatributo)) {
             $this->descripcion = $attribute->nombre . ' ' . $this->valor;
         }
@@ -110,7 +148,7 @@ class AtributoValor extends Base\ModelClass
     }
 
     /**
-     * 
+     *
      * @param string $type
      * @param string $list
      *
@@ -121,7 +159,7 @@ class AtributoValor extends Base\ModelClass
         $value = $this->codatributo;
         switch ($type) {
             case 'edit':
-                return is_null($value) ? 'EditAtributo' : 'EditAtributo?code=' . $value;
+                return null === $value ? 'EditAtributo' : 'EditAtributo?code=' . $value;
 
             case 'list':
                 return $list;

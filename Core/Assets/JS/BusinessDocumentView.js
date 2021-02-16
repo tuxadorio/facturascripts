@@ -38,19 +38,55 @@ function beforeChange(changes, source) {
     }
 }
 
-function businessDocViewAutocompleteGetData(formId, field, source, fieldcode, fieldtitle, term) {
-    var formData = {};
+function businessDocViewAutocompleteGetData(formId, formData, term) {
     var rawForm = $("form[id=" + formId + "]").serializeArray();
     $.each(rawForm, function (i, input) {
         formData[input.name] = input.value;
     });
     formData["action"] = "autocomplete";
-    formData["field"] = field;
-    formData["source"] = source;
-    formData["fieldcode"] = fieldcode;
-    formData["fieldtitle"] = fieldtitle;
     formData["term"] = term;
     return formData;
+}
+
+function businessDocViewSubjectChanged() {
+    var data = {};
+    $.each($("#" + businessDocViewFormName).serializeArray(), function (key, value) {
+        data[value.name] = value.value;
+    });
+    data.action = "subject-changed";
+    console.log("data", data);
+
+    $.ajax({
+        type: "POST",
+        url: businessDocViewUrl,
+        dataType: "json",
+        data: data,
+        success: function (results) {
+            $("#doc_codpago").val(results.codpago);
+            $("#doc_codserie").val(results.codserie);
+            /**
+             * Review the doc_codsubtipodoc existence, 
+             * if it exist we put the value from the customer data
+             */
+            if($("#doc_codsubtipodoc").length !== 0) {
+                $("#doc_codsubtipodoc").val(results.codsubtipodoc);
+            }
+            /**
+             * Review the doc_codopersaciondoc existence, 
+             * if it exist we put the value from the customer data
+             */
+            if($("#doc_codoperaciondoc").length !== 0) {
+                $("#doc_codoperaciondoc").val(results.codoperaciondoc);
+            }
+            
+            console.log("results", results);
+
+            businessDocViewRecalculate();
+        },
+        error: function (xhr, status, error) {
+            alert(xhr.responseText);
+        }
+    });
 }
 
 function businessDocViewRecalculate() {
@@ -68,7 +104,13 @@ function businessDocViewRecalculate() {
         dataType: "json",
         data: data,
         success: function (results) {
-            $("#doc_total").val(results.total);
+            $("#doc_neto").val(results.doc.neto);
+            $("#doc_netosindto").val(results.doc.netosindto);
+            $("#doc_total").val(results.doc.total);
+            $("#doc_total2").val(results.doc.total);
+            $("#doc_totaliva").val(results.doc.totaliva);
+            $("#doc_totalrecargo").val(results.doc.totalrecargo);
+            $("#doc_totalirpf").val(results.doc.totalirpf);
 
             var rowPos = 0;
             results.lines.forEach(function (element) {
@@ -96,6 +138,7 @@ function businessDocViewSave() {
     data.action = "save-document";
     data.lines = getGridData();
     console.log(data);
+
     $.ajax({
         type: "POST",
         url: businessDocViewUrl,
@@ -107,6 +150,7 @@ function businessDocViewSave() {
                 $("#" + businessDocViewFormName).attr('action', results.substring(3)).submit();
             } else {
                 alert(results);
+                $("#" + businessDocViewFormName + " :input[name=\"multireqtoken\"]").val(randomString(20));
             }
         },
         error: function (msg) {
@@ -115,19 +159,6 @@ function businessDocViewSave() {
     });
 
     $("#btn-document-save").prop("disabled", false);
-}
-
-function getGridData() {
-    var rowIndex, lines = [];
-    for (var i = 0, max = businessDocViewLineData.rows.length; i < max; i++) {
-        rowIndex = hsTable.toVisualRow(i);
-        if (hsTable.isEmptyRow(rowIndex)) {
-            continue;
-        }
-
-        lines[rowIndex] = businessDocViewLineData.rows[i];
-    }
-    return lines;
 }
 
 function businessDocViewSetAutocompletes(columns) {
@@ -169,6 +200,29 @@ function businessDocViewSetAutocompletes(columns) {
     return columns;
 }
 
+function getGridData() {
+    var rowIndex, lines = [];
+    for (var i = 0, max = businessDocViewLineData.rows.length; i < max; i++) {
+        rowIndex = hsTable.toVisualRow(i);
+        if (hsTable.isEmptyRow(rowIndex)) {
+            continue;
+        }
+
+        lines[rowIndex] = businessDocViewLineData.rows[i];
+    }
+    return lines;
+}
+
+function randomString(length) {
+    var result = '';
+    var characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    var charactersLength = characters.length;
+    for (var i = 0; i < length; i++) {
+        result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    }
+    return result;
+}
+
 $(document).ready(function () {
     var container = document.getElementById("document-lines");
     hsTable = new Handsontable(container, {
@@ -202,30 +256,32 @@ $(document).ready(function () {
         hsTable.render();
     });
 
-    $("#doc_codserie").change(function () {
+    $("#doc_codserie, #doc_dtopor1, #doc_dtopor2").change(function () {
         businessDocViewRecalculate();
     });
 
     $(".autocomplete-dc").each(function () {
-        var field = $(this).attr("data-field");
-        var source = $(this).attr("data-source");
-        var fieldcode = $(this).attr("data-fieldcode");
-        var fieldtitle = $(this).attr("data-fieldtitle");
+        var data = {
+            field: $(this).attr("data-field"),
+            fieldcode: $(this).attr("data-fieldcode"),
+            fieldtitle: $(this).attr("data-fieldtitle"),
+            source: $(this).attr("data-source")
+        };
         var formName = $(this).closest("form").attr("name");
         $(this).autocomplete({
             source: function (request, response) {
                 $.ajax({
                     method: "POST",
                     url: businessDocViewUrl,
-                    data: businessDocViewAutocompleteGetData(formName, field, source, fieldcode, fieldtitle, request.term),
+                    data: businessDocViewAutocompleteGetData(formName, data, request.term),
                     dataType: "json",
                     success: function (results) {
                         var values = [];
                         results.forEach(function (element) {
-                            if (element.key !== null) {
-                                values.push({key: element.key, value: element.key + " | " + element.value});
+                            if (element.key === null || element.key === element.value) {
+                                values.push(element);
                             } else {
-                                values.push({key: null, value: element.value});
+                                values.push({key: element.key, value: element.key + " | " + element.value});
                             }
                         });
                         response(values);
@@ -236,10 +292,15 @@ $(document).ready(function () {
                 });
             },
             select: function (event, ui) {
-                var value = ui.item.value.split(" | ");
-                if (value[0] !== null) {
-                    $("#" + field + "Autocomplete").val(ui.item.key);
-                    ui.item.value = value[1];
+                if (ui.item.key !== null) {
+                    $("#" + data.field + "Autocomplete").val(ui.item.key);
+                    var value = ui.item.value.split(" | ");
+                    if (value.length > 1) {
+                        ui.item.value = value[1];
+                    } else {
+                        ui.item.value = value[0];
+                    }
+                    businessDocViewSubjectChanged();
                 }
             }
         });

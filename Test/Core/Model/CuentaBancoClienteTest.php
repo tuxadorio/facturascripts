@@ -1,8 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017       Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
- * Copyright (C) 2017-2018  Carlos Garcia Gomez     <carlos@facturascripts.com>
+ * Copyright (C) 2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,19 +18,68 @@
  */
 namespace FacturaScripts\Test\Core\Model;
 
+use FacturaScripts\Core\Model\Cliente;
 use FacturaScripts\Core\Model\CuentaBancoCliente;
 use FacturaScripts\Test\Core\CustomTest;
 
 /**
- * @covers \CuentaBancoCliente
+ * Description of CuentaBancoClienteTest
  *
- * @author Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
+ * @author Carlos Garcia Gomez <carlos@facturascripts.com>
+ * @covers \FacturaScripts\Core\Model\CuentaBancoCliente
  */
-final class CuentaBancoClienteTest extends CustomTest
+class CuentaBancoClienteTest extends CustomTest
 {
 
     protected function setUp()
     {
         $this->model = new CuentaBancoCliente();
+    }
+
+    public function testSaveInsert()
+    {
+        /// save customer
+        $customer = new Cliente();
+        $customer->cifnif = '1234';
+        $customer->nombre = 'Test';
+        $this->assertTrue($customer->save());
+
+        /// save bank account
+        $account = new CuentaBancoCliente();
+        $account->codcliente = $customer->primaryColumnValue();
+        $account->descripcion = 'test';
+        $this->assertTrue($account->save());
+
+        /// delete bank account
+        $this->assertTrue($account->delete());
+
+        /// delete customer
+        $this->assertTrue($customer->delete());
+    }
+
+    public function testIBAN()
+    {
+        /// save customer
+        $customer = new Cliente();
+        $customer->cifnif = '1234';
+        $customer->nombre = 'Test';
+        $this->assertTrue($customer->save());
+
+        /// save valid iban
+        $account = new CuentaBancoCliente();
+        $account->codcliente = $customer->primaryColumnValue();
+        $account->descripcion = 'test';
+        $account->iban = 'ES91 2100 0418 4502 0005 1332';
+        $this->assertTrue($account->save());
+
+        /// now save invalid iban
+        $account->iban = '1234';
+        $this->assertFalse($account->save());
+
+        /// delete bank account
+        $this->assertTrue($account->delete());
+
+        /// delete customer
+        $this->assertTrue($customer->delete());
     }
 }

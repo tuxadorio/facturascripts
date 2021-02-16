@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez  <carlos@facturascripts.com>
+ * Copyright (C) 2013-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,8 +18,7 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\App\AppSettings;
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 
 /**
  * A tax (VAT) that can be associated to articles, delivery notes lines,
@@ -31,6 +30,9 @@ class Impuesto extends Base\ModelClass
 {
 
     use Base\ModelTrait;
+
+    const TYPE_PENCENTAGE = 1;
+    const TYPE_FIXED_VALUE = 2;
 
     /**
      * Primary key. varchar(10).
@@ -59,6 +61,13 @@ class Impuesto extends Base\ModelClass
     public $descripcion;
 
     /**
+     * Type of tax.
+     *
+     * @var int
+     */
+    public $tipo;
+
+    /**
      * Value of VAT.
      *
      * @var float|int
@@ -78,18 +87,47 @@ class Impuesto extends Base\ModelClass
     public function clear()
     {
         parent::clear();
+        $this->tipo = self::TYPE_PENCENTAGE;
         $this->iva = 0.0;
         $this->recargo = 0.0;
     }
 
     /**
-     * Returns True if is the default tax for the user.
+     * Removes tax from database.
+     * 
+     * @return bool
+     */
+    public function delete()
+    {
+        if ($this->isDefault()) {
+            $this->toolBox()->i18nLog()->warning('cant-delete-default-tax');
+            return false;
+        }
+
+        return parent::delete();
+    }
+
+    /**
+     * Gets the input tax accounting subaccount indicated.
+     * If it does not exist, the default tax is returned.
+     * 
+     * @param string $subAccount
+     *
+     * @return self
+     */
+    public function inputVatFromSubAccount($subAccount)
+    {
+        return $this->getVatFromSubAccount('codsubcuentarep', $subAccount);
+    }
+
+    /**
+     * Returns True if this is the default tax.
      *
      * @return bool
      */
     public function isDefault()
     {
-        return $this->codimpuesto === AppSettings::get('default', 'codimpuesto');
+        return $this->codimpuesto === $this->toolBox()->appSettings()->get('default', 'codimpuesto');
     }
 
     /**
@@ -100,6 +138,19 @@ class Impuesto extends Base\ModelClass
     public static function primaryColumn()
     {
         return 'codimpuesto';
+    }
+
+    /**
+     * Gets the output tax accounting subaccount indicated.
+     * If it does not exist, the default tax is returned.
+     * 
+     * @param string $subAccount
+     *
+     * @return self
+     */
+    public function outputVatFromSubAccount($subAccount)
+    {
+        return $this->getVatFromSubAccount('codsubcuentasop', $subAccount);
     }
 
     /**
@@ -119,21 +170,52 @@ class Impuesto extends Base\ModelClass
      */
     public function test()
     {
-        $this->codimpuesto = trim($this->codimpuesto);
-        if (empty($this->codimpuesto) || strlen($this->codimpuesto) > 10) {
-            self::$miniLog->alert(self::$i18n->trans('not-valid-tax-code-length'));
+        $this->codimpuesto = \trim($this->codimpuesto);
+        if ($this->codimpuesto && 1 !== \preg_match('/^[A-Z0-9_\+\.\-]{1,10}$/i', $this->codimpuesto)) {
+            $this->toolBox()->i18nLog()->error(
+                'invalid-alphanumeric-code',
+                ['%value%' => $this->codimpuesto, '%column%' => 'codimpuesto', '%min%' => '1', '%max%' => '10']
+            );
             return false;
         }
 
         $this->codsubcuentarep = empty($this->codsubcuentarep) ? null : $this->codsubcuentarep;
         $this->codsubcuentasop = empty($this->codsubcuentasop) ? null : $this->codsubcuentasop;
+        $this->descripcion = $this->toolBox()->utils()->noHtml($this->descripcion);
+        return parent::test();
+    }
 
-        $this->descripcion = Utils::noHtml($this->descripcion);
-        if (empty($this->descripcion) || strlen($this->descripcion) > 50) {
-            self::$miniLog->alert(self::$i18n->trans('not-valid-description-tax'));
-            return false;
+    /**
+     * 
+     * @param string $field
+     * @param string $subAccount
+     *
+     * @return static
+     */
+    private function getVatFromSubAccount($field, $subAccount)
+    {
+        $result = new Impuesto();
+        $where = [new DataBaseWhere($field, $subAccount)];
+        if ($result->loadFromCode('', $where)) {
+            return $result;
         }
 
-        return parent::test();
+        $result->loadFromCode($this->toolBox()->appSettings()->get('default', 'codimpuesto'));
+        return $result;
+    }
+
+    /**
+     * 
+     * @param array $values
+     *
+     * @return bool
+     */
+    protected function saveInsert(array $values = [])
+    {
+        if (empty($this->codimpuesto)) {
+            $this->codimpuesto = (string) $this->newCode();
+        }
+
+        return parent::saveInsert($values);
     }
 }

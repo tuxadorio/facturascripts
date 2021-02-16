@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2012-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2012-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,9 +18,7 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\App\AppSettings;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Base\Utils;
 
 /**
  * Stores the data of an article.
@@ -31,6 +29,7 @@ class Producto extends Base\ModelClass
 {
 
     use Base\ModelTrait;
+    use Base\TaxRelationTrait;
 
     const ROUND_DECIMALS = 5;
 
@@ -63,13 +62,6 @@ class Producto extends Base\ModelClass
     public $codfamilia;
 
     /**
-     * Tax identifier of the tax assigned.
-     *
-     * @var string
-     */
-    public $codimpuesto;
-
-    /**
      * Sub-account code for purchases.
      *
      * @var string
@@ -98,17 +90,18 @@ class Producto extends Base\ModelClass
     public $descripcion;
 
     /**
+     * Date on which the product was registered.
+     *
+     * @var string
+     */
+    public $fechaalta;
+
+    /**
      * Primary key.
      *
      * @var int
      */
     public $idproducto;
-
-    /**
-     *
-     * @var Impuesto[]
-     */
-    private static $impuestos = [];
 
     /**
      * True -> do not control the stock.
@@ -180,30 +173,17 @@ class Producto extends Base\ModelClass
     public function clear()
     {
         parent::clear();
-        $this->actualizado = date('d-m-Y H:i:s');
+        $this->actualizado = \date(self::DATETIME_STYLE);
         $this->bloqueado = false;
-        $this->codimpuesto = AppSettings::get('default', 'codimpuesto');
+        $this->codimpuesto = $this->toolBox()->appSettings()->get('default', 'codimpuesto');
+        $this->fechaalta = \date(self::DATE_STYLE);
         $this->nostock = false;
         $this->precio = 0.0;
         $this->publico = false;
         $this->secompra = true;
         $this->sevende = true;
         $this->stockfis = 0.0;
-        $this->ventasinstock = (bool) AppSettings::get('default', 'ventasinstock', false);
-    }
-
-    /**
-     * 
-     * @return Impuesto
-     */
-    public function getImpuesto()
-    {
-        if (!isset(self::$impuestos[$this->codimpuesto])) {
-            self::$impuestos[$this->codimpuesto] = new Impuesto();
-            self::$impuestos[$this->codimpuesto]->loadFromCode($this->codimpuesto);
-        }
-
-        return self::$impuestos[$this->codimpuesto];
+        $this->ventasinstock = (bool) $this->toolBox()->appSettings()->get('default', 'ventasinstock', false);
     }
 
     /**
@@ -242,7 +222,7 @@ class Producto extends Base\ModelClass
      */
     public function priceWithTax()
     {
-        return $this->precio * (100 + $this->getImpuesto()->iva) / 100;
+        return $this->precio * (100 + $this->getTax()->iva) / 100;
     }
 
     /**
@@ -270,17 +250,15 @@ class Producto extends Base\ModelClass
      */
     public function setPriceWithTax($price)
     {
-        $impuesto = $this->getImpuesto();
-        $newPrice = (100 * $price) / (100 + $impuesto->iva);
-
+        $newPrice = (100 * $price) / (100 + $this->getTax()->iva);
         foreach ($this->getVariants() as $variant) {
             if ($variant->referencia == $this->referencia) {
-                $variant->precio = round($newPrice, self::ROUND_DECIMALS);
+                $variant->precio = \round($newPrice, self::ROUND_DECIMALS);
                 return $variant->save();
             }
         }
 
-        $this->precio = round($newPrice, self::ROUND_DECIMALS);
+        $this->precio = \round($newPrice, self::ROUND_DECIMALS);
     }
 
     /**
@@ -300,9 +278,18 @@ class Producto extends Base\ModelClass
      */
     public function test()
     {
-        $this->descripcion = Utils::noHtml($this->descripcion);
-        $this->observaciones = Utils::noHtml($this->observaciones);
-        $this->referencia = Utils::noHtml($this->referencia);
+        $utils = $this->toolBox()->utils();
+        $this->descripcion = $utils->noHtml($this->descripcion);
+        $this->observaciones = $utils->noHtml($this->observaciones);
+        $this->referencia = $utils->noHtml($this->referencia);
+
+        if (\strlen($this->referencia) < 1 || \strlen($this->referencia) > 30) {
+            $this->toolBox()->i18nLog()->warning(
+                'invalid-column-lenght',
+                ['%value%' => $this->referencia, '%column%' => 'referencia', '%min%' => '1', '%max%' => '30']
+            );
+            return false;
+        }
 
         if ($this->nostock && $this->stockfis != 0 && null !== $this->idproducto) {
             $sql = "DELETE FROM " . Stock::tableName() . " WHERE idproducto = " . self::$dataBase->var2str($this->idproducto)
@@ -320,12 +307,7 @@ class Producto extends Base\ModelClass
             $this->publico = false;
         }
 
-        if (strlen($this->referencia) < 1 || strlen($this->referencia) > 30) {
-            self::$miniLog->alert(self::$i18n->trans('invalid-column-lenght', ['%column%' => 'referencia', '%min%' => '1', '%max%' => '30']));
-            return false;
-        }
-
-        $this->actualizado = date('d-m-Y H:i:s');
+        $this->actualizado = \date(self::DATETIME_STYLE);
         return parent::test();
     }
 
@@ -338,11 +320,10 @@ class Producto extends Base\ModelClass
         $newReferencia = null;
 
         foreach ($this->getVariants() as $variant) {
-            if ($newPrecio == 0.0 || $variant->precio < $newPrecio) {
+            if ($variant->referencia == $this->referencia || \is_null($newReferencia)) {
                 $newPrecio = $variant->precio;
-            }
-            if ($variant->referencia == $this->referencia || is_null($newReferencia)) {
                 $newReferencia = $variant->referencia;
+                break;
             }
         }
 
@@ -366,6 +347,7 @@ class Producto extends Base\ModelClass
             $variant->idproducto = $this->idproducto;
             $variant->precio = $this->precio;
             $variant->referencia = $this->referencia;
+            $variant->stockfis = $this->stockfis;
             if ($variant->save()) {
                 return true;
             }

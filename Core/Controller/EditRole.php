@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,9 +18,12 @@
  */
 namespace FacturaScripts\Core\Controller;
 
+use Exception;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Dinamic\Lib\ExtendedController\EditController;
-use FacturaScripts\Dinamic\Model;
+use FacturaScripts\Core\Lib\ExtendedController\BaseView;
+use FacturaScripts\Core\Lib\ExtendedController\EditController;
+use FacturaScripts\Dinamic\Model\Page;
+use FacturaScripts\Dinamic\Model\RoleAccess;
 
 /**
  * Controller to edit a single item from the Role model.
@@ -47,29 +50,26 @@ class EditRole extends EditController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'role';
-        $pagedata['menu'] = 'admin';
-        $pagedata['icon'] = 'fas fa-id-card';
-        $pagedata['showonmenu'] = false;
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['title'] = 'role';
+        $data['icon'] = 'fas fa-id-card';
+        return $data;
     }
 
     /**
      * Add the indicated page list to the Role group
      * and all users who are in that group
      *
-     * @param string       $codrole
-     * @param Model\Page[] $pages
+     * @param string $codrole
+     * @param Page[] $pages
      *
-     * @throws \Exception
+     * @throws Exception
      */
-    private function addRoleAccess($codrole, $pages)
+    protected function addRoleAccess($codrole, $pages)
     {
-        // add Pages to Rol
-        if (!Model\RoleAccess::addPagesToRole($codrole, $pages)) {
-            throw new \Exception($this->i18n->trans('cancel-process'));
+        if (false === RoleAccess::addPagesToRole($codrole, $pages)) {
+            throw new Exception($this->toolBox()->i18n()->trans('cancel-process'));
         }
     }
 
@@ -79,18 +79,41 @@ class EditRole extends EditController
     protected function createViews()
     {
         parent::createViews();
-        $this->addEditListView('EditRoleAccess', 'RoleAccess', 'rules', 'fas fa-check-square');
-        $this->addEditListView('EditRoleUser', 'RoleUser', 'users', 'fas fa-address-card');
+        $this->setTabsPosition('bottom');
+        $this->createViewsAccess();
+        $this->createViewsUsers();
+    }
 
-        /// Disable columns
-        $this->views['EditRoleAccess']->disableColumn('role', true);
-        $this->views['EditRoleUser']->disableColumn('role', true);
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewsAccess(string $viewName = 'EditRoleAccess')
+    {
+        $this->addEditListView($viewName, 'RoleAccess', 'rules', 'fas fa-check-square');
+        $this->views[$viewName]->setInLine(true);
+
+        /// Disable column
+        $this->views[$viewName]->disableColumn('role', true);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewsUsers(string $viewName = 'EditRoleUser')
+    {
+        $this->addEditListView($viewName, 'RoleUser', 'users', 'fas fa-address-card');
+        $this->views[$viewName]->setInLine(true);
+
+        /// Disable column
+        $this->views[$viewName]->disableColumn('role', true);
     }
 
     /**
      * Run the actions that alter data before reading it
      *
-     * @param string   $action
+     * @param string $action
      *
      * @return bool
      */
@@ -108,11 +131,10 @@ class EditRole extends EditController
                 try {
                     $this->addRoleAccess($codrole, $pages);
                     $this->dataBase->commit();
-                } catch (\Exception $e) {
+                } catch (Exception $e) {
                     $this->dataBase->rollback();
-                    $this->miniLog->notice($e->getMessage());
+                    $this->toolBox()->log()->notice($e->getMessage());
                 }
-
                 return true;
 
             default:
@@ -124,38 +146,35 @@ class EditRole extends EditController
      * List of all the pages included in a menu option
      * and, optionally, included in a submenu option
      *
-     * @return Model\Page[]
+     * @return Page[]
      */
-    private function getPages()
+    protected function getPages()
     {
         $menu = $this->request->get('menu', '---null---');
         if ($menu === '---null---') {
             return [];
         }
 
-        $page = new Model\Page();
+        $page = new Page();
         $where = [new DataBaseWhere('menu', $menu)];
-
         return $page->all($where);
     }
 
     /**
      * Load view data
      *
-     * @param string $viewName
-     * @param object $view
+     * @param string   $viewName
+     * @param BaseView $view
      */
     protected function loadData($viewName, $view)
     {
-        $order = [];
         switch ($viewName) {
             case 'EditRoleAccess':
-                $order['pagename'] = 'ASC';
             /// no break
             case 'EditRoleUser':
                 $codrole = $this->getViewModelValue('EditRole', 'codrole');
                 $where = [new DataBaseWhere('codrole', $codrole)];
-                $view->loadData('', $where, $order);
+                $view->loadData('', $where, ['id' => 'DESC']);
                 break;
 
             default:

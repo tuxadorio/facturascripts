@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,8 +18,8 @@
  */
 namespace FacturaScripts\Core\Base;
 
-use FacturaScripts\Core\App\AppSettings;
 use FacturaScripts\Dinamic\Lib\AssetManager;
+use FacturaScripts\Dinamic\Lib\MultiRequestProtection;
 use FacturaScripts\Dinamic\Model\Empresa;
 use FacturaScripts\Dinamic\Model\User;
 use Symfony\Component\HttpFoundation\Cookie;
@@ -33,13 +33,6 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class Controller
 {
-
-    /**
-     * Cache access manager.
-     *
-     * @var Cache
-     */
-    protected $cache;
 
     /**
      * Name of the class of the controller (although its in inheritance from this class,
@@ -64,18 +57,10 @@ class Controller
     public $empresa;
 
     /**
-     * Translator engine.
      *
-     * @var Translator
+     * @var MultiRequestProtection
      */
-    protected $i18n;
-
-    /**
-     * App log manager.
-     *
-     * @var MiniLog
-     */
-    protected $miniLog;
+    public $multiRequestProtection;
 
     /**
      * User permissions on this controller.
@@ -129,39 +114,35 @@ class Controller
     /**
      * Initialize all objects and properties.
      *
-     * @param Cache      $cache
-     * @param Translator $i18n
-     * @param MiniLog    $miniLog
-     * @param string     $className
-     * @param string     $uri
+     * @param string $className
+     * @param string $uri
      */
-    public function __construct(&$cache, &$i18n, &$miniLog, $className, $uri = '')
+    public function __construct(string $className, string $uri = '')
     {
-        $this->cache = &$cache;
         $this->className = $className;
         $this->dataBase = new DataBase();
         $this->empresa = new Empresa();
-        $this->i18n = &$i18n;
-        $this->miniLog = &$miniLog;
+        $this->multiRequestProtection = new MultiRequestProtection();
         $this->request = Request::createFromGlobals();
         $this->template = $this->className . '.html.twig';
         $this->uri = $uri;
 
         $pageData = $this->getPageData();
-        $this->title = empty($pageData) ? $this->className : $this->i18n->trans($pageData['title']);
+        $this->title = empty($pageData) ? $this->className : $this->toolBox()->i18n()->trans($pageData['title']);
 
         AssetManager::clear();
         AssetManager::setAssetsForPage($className);
+
+        $this->checkPHPversion(7.1);
     }
 
     /**
-     * Return the name of the controller.
-     *
-     * @return string
+     * 
+     * @param mixed $extension
      */
-    protected function getClassName()
+    public static function addExtension($extension)
     {
-        return $this->className;
+        static::toolBox()->i18nLog()->error('no-extension-support', ['%className%' => static::class]);
     }
 
     /**
@@ -178,7 +159,7 @@ class Controller
             'menu' => 'new',
             'submenu' => null,
             'showonmenu' => true,
-            'ordernum' => 100,
+            'ordernum' => 100
         ];
     }
 
@@ -190,6 +171,19 @@ class Controller
     public function getTemplate()
     {
         return $this->template;
+    }
+
+    /**
+     * 
+     * @param string $name
+     * @param array  $arguments
+     *
+     * @return mixed
+     */
+    public function pipe($name, ...$arguments)
+    {
+        $this->toolBox()->i18nLog()->error('no-extension-support', ['%className%' => static::class]);
+        return null;
     }
 
     /**
@@ -212,11 +206,11 @@ class Controller
         $defaultPage = $this->request->query->get('defaultPage', '');
         if ($defaultPage === 'TRUE') {
             $this->user->homepage = $this->className;
-            $this->response->headers->setCookie(new Cookie('fsHomepage', $this->user->homepage, time() + FS_COOKIES_EXPIRE));
+            $this->response->headers->setCookie(new Cookie('fsHomepage', $this->user->homepage, time() + \FS_COOKIES_EXPIRE));
             $this->user->save();
         } elseif ($defaultPage === 'FALSE') {
             $this->user->homepage = null;
-            $this->response->headers->setCookie(new Cookie('fsHomepage', $this->user->homepage, time() - FS_COOKIES_EXPIRE));
+            $this->response->headers->setCookie(new Cookie('fsHomepage', $this->user->homepage, time() - \FS_COOKIES_EXPIRE));
             $this->user->save();
         }
     }
@@ -228,10 +222,11 @@ class Controller
      */
     public function publicCore(&$response)
     {
+        $this->permissions = new ControllerPermissions();
         $this->response = &$response;
         $this->template = 'Login/Login.html.twig';
 
-        $idempresa = AppSettings::get('default', 'idempresa');
+        $idempresa = $this->toolBox()->appSettings()->get('default', 'idempresa');
         $this->empresa->loadFromCode($idempresa);
     }
 
@@ -244,6 +239,9 @@ class Controller
     public function redirect($url, $delay = 0)
     {
         $this->response->headers->set('Refresh', $delay . '; ' . $url);
+        if ($delay === 0) {
+            $this->setTemplate(false);
+        }
     }
 
     /**
@@ -260,11 +258,42 @@ class Controller
     }
 
     /**
+     * 
+     * @return ToolBox
+     */
+    public static function toolBox()
+    {
+        return new ToolBox();
+    }
+
+    /**
      * Return the URL of the actual controller.
      *
      * @return string
      */
     public function url()
+    {
+        return $this->className;
+    }
+
+    /**
+     * 
+     * @param float $min
+     */
+    private function checkPHPversion(float $min)
+    {
+        $current = (float) \substr(\phpversion(), 0, 3);
+        if ($current < $min) {
+            $this->toolBox()->i18nLog()->warning('php-support-end', ['%current%' => $current, '%min%' => $min]);
+        }
+    }
+
+    /**
+     * Return the name of the controller.
+     *
+     * @return string
+     */
+    protected function getClassName(): string
     {
         return $this->className;
     }

@@ -2,7 +2,7 @@
 /**
  * This file is part of FacturaScripts
  * Copyright (C) 2016       Joe Nilson             <joenilson at gmail.com>
- * Copyright (C) 2017-2018  Carlos García Gómez    <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019  Carlos García Gómez    <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
@@ -18,8 +18,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 namespace FacturaScripts\Core\Model;
-
-use FacturaScripts\Core\Base\Utils;
 
 /**
  * Define a permission package to quickly assign users.
@@ -74,8 +72,15 @@ class Role extends Base\ModelClass
      */
     public function test()
     {
-        $this->descripcion = Utils::noHtml($this->descripcion);
+        if (!empty($this->codrole) && 1 !== \preg_match('/^[A-Z0-9_\+\.\-]{1,20}$/i', $this->codrole)) {
+            $this->toolBox()->i18nLog()->warning(
+                'invalid-alphanumeric-code',
+                ['%value%' => $this->codrole, '%column%' => 'codrole', '%min%' => '1', '%max%' => '20']
+            );
+            return false;
+        }
 
+        $this->descripcion = $this->toolBox()->utils()->noHtml($this->descripcion);
         return parent::test();
     }
 
@@ -87,8 +92,23 @@ class Role extends Base\ModelClass
      *
      * @return string
      */
-    public function url(string $type = 'auto', string $list = 'List')
+    public function url(string $type = 'auto', string $list = 'ListUser?activetab=List')
     {
-        return parent::url($type, 'ListUser?activetab=List');
+        return parent::url($type, $list);
+    }
+
+    /**
+     * 
+     * @param array $values
+     *
+     * @return bool
+     */
+    protected function saveInsert(array $values = [])
+    {
+        if (empty($this->codrole)) {
+            $this->codrole = (string) $this->newCode();
+        }
+
+        return parent::saveInsert($values);
     }
 }

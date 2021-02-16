@@ -1,0 +1,68 @@
+{#
+    /**
+     * This file is part of FacturaScripts
+     * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
+     *
+     * This program is free software: you can redistribute it and/or modify
+     * it under the terms of the GNU Lesser General Public License as
+     * published by the Free Software Foundation, either version 3 of the
+     * License, or (at your option) any later version.
+     *
+     * This program is distributed in the hope that it will be useful,
+     * but WITHOUT ANY WARRANTY; without even the implied warranty of
+     * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+     * GNU Lesser General Public License for more details.
+     *
+     * You should have received a copy of the GNU Lesser General Public License
+     * along with this program. If not, see http://www.gnu.org/licenses/.
+     */
+#}
+{% set currentView = fsc.getCurrentView() %}
+
+{# -- Row header -- #}
+<div class="row">
+    {% set row = currentView.getRow('header') %}
+    {{ row.render(currentView.getViewName(), '', fsc) | raw }}
+</div>
+
+<form id="form{{ currentView.getViewName() }}" method="post" enctype="multipart/form-data">
+    <input type="hidden" name="action" value="edit"/>
+    <input type="hidden" name="activetab" value="{{ currentView.getViewName() }}"/>
+    <input type="hidden" name="code" value="{{ currentView.model.primaryColumnValue() }}"/>
+    <div class="{{ currentView.settings.card ? 'card shadow' : '' }}">
+        <div class="{{ currentView.settings.card ? 'card-body' : 'container-fluid' }}">
+            <div class="row">
+                <div class="col-12 text-right">
+                    {# -- Row statistics -- #}
+                    {% set row = currentView.getRow('statistics') %}
+                    {{ row.render(fsc) | raw }}
+                </div>
+            </div>
+            <div class="form-row">
+                {% for group in currentView.getColumns() %}
+                    {{ group.edit(currentView.model, true) | raw }}
+                {% endfor %}
+            </div>
+            <div class="row">
+                <div class="col">
+                    {# -- Row actions -- #}
+                    {% set row = currentView.getRow('actions') %}
+                    {{ row.render(false, currentView.getViewName()) | raw }}
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<br/>
+
+{# -- Row footer -- #}
+<div class="row">
+    {% set row = currentView.getRow('footer') %}
+    {{ row.render(currentView.getViewName(), '', fsc) | raw }}
+</div>
+
+{# -- Modals -- #}
+{% for group in currentView.getModals() %}
+    {{ group.modal(currentView.model, currentView.getViewName()) | raw }}
+{% endfor %}

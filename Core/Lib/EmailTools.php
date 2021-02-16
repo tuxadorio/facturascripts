@@ -19,9 +19,9 @@
 namespace FacturaScripts\Core\Lib;
 
 use FacturaScripts\Core\App\WebRender;
-use FacturaScripts\Core\Base\MiniLog;
-use FacturaScripts\Core\Base\Translator as i18n;
-use FacturaScripts\Core\Model\Settings;
+use FacturaScripts\Core\Base\ToolBox;
+use FacturaScripts\Dinamic\Model\EmailSent;
+use FacturaScripts\Dinamic\Model\Settings;
 use PHPMailer\PHPMailer\PHPMailer;
 
 /**
@@ -64,9 +64,11 @@ class EmailTools
             foreach ($files as $file) {
                 $mail->addAttachment($file->getPathname(), $file->getClientOriginalName());
             }
+
+            return;
         }
 
-        $mail->addAttachment(FS_FOLDER . '/MyFiles/' . $files);
+        $mail->addAttachment(\FS_FOLDER . '/MyFiles/' . $files);
     }
 
     /**
@@ -130,10 +132,12 @@ class EmailTools
 
     /**
      * Create new PHPMailer connection with stored settings.
+     * 
+     * @param string $fromName
      *
      * @return PHPMailer
      */
-    public function newMail()
+    public function newMail($fromName = '')
     {
         $mail = new PHPMailer();
         $mail->CharSet = 'UTF-8';
@@ -145,7 +149,7 @@ class EmailTools
         $mail->Port = $this->getSetting('port');
         $mail->Username = $this->getSetting('user') ? $this->getSetting('user') : $this->getSetting('email');
         $mail->Password = $this->getSetting('password');
-        $mail->setFrom($this->getSetting('email'));
+        $mail->setFrom($this->getSetting('email'), $fromName);
 
         return $mail;
     }
@@ -175,14 +179,36 @@ class EmailTools
             return false;
         }
 
-        if ($mail->smtpConnect($this->smtpOptions()) && $mail->send()) {
+        if ($this->getSetting('mailer') === 'smtp' && !$mail->smtpConnect($this->smtpOptions())) {
+            $this->toolBox()->i18nLog()->error('error', ['%error%' => $mail->ErrorInfo]);
+            return false;
+        }
+
+        if ($mail->send()) {
+            /// get all email address
+            $addresses = [];
+            foreach ($mail->getToAddresses() as $addr) {
+                $addresses[] = $addr[0];
+            }
+            foreach ($mail->getCcAddresses() as $addr) {
+                $addresses[] = $addr[0];
+            }
+            foreach ($mail->getBccAddresses() as $addr) {
+                $addresses[] = $addr[0];
+            }
+
+            /// save email sent
+            foreach (array_unique($addresses) as $address) {
+                $emailSent = new EmailSent();
+                $emailSent->addressee = $address;
+                $emailSent->body = $mail->Body;
+                $emailSent->subject = $mail->Subject;
+                $emailSent->save();
+            }
             return true;
         }
 
-        $i18n = new i18n();
-        $miniLog = new MiniLog();
-        $miniLog->alert($i18n->trans('error', ['%error%' => $mail->ErrorInfo]));
-
+        $this->toolBox()->i18nLog()->error('error', ['%error%' => $mail->ErrorInfo]);
         return false;
     }
 
@@ -234,13 +260,11 @@ class EmailTools
         /// Send Email
         if ($emailTools->send($mail)) {
             /// Remove upload files
-            if (!empty($data['fileName']) && file_exists(FS_FOLDER . '/MyFiles/' . $data['fileName'])) {
-                unlink(FS_FOLDER . '/MyFiles/' . $data['fileName']);
+            if (!empty($data['fileName']) && file_exists(\FS_FOLDER . '/MyFiles/' . $data['fileName'])) {
+                unlink(\FS_FOLDER . '/MyFiles/' . $data['fileName']);
             }
 
-            $i18n = new i18n();
-            $miniLog = new MiniLog();
-            $miniLog->notice($i18n->trans('send-mail-ok'));
+            static::toolBox()->i18nLog()->notice('send-mail-ok');
             return true;
         }
 
@@ -254,13 +278,13 @@ class EmailTools
      */
     public function test()
     {
-        if (self::$settings['mailer'] === 'smtp') {
-            $mail = $this->newMail();
+        switch ($this->getSetting('mailer')) {
+            case 'smtp':
+                return $this->newMail()->smtpConnect($this->smtpOptions());
 
-            return $mail->smtpConnect($this->smtpOptions());
+            default:
+                return true;
         }
-
-        return true;
     }
 
     /**
@@ -270,7 +294,7 @@ class EmailTools
      *
      * @return array
      */
-    private function getEmails(string $emails): array
+    protected function getEmails(string $emails): array
     {
         if (empty($emails)) {
             return [];
@@ -287,7 +311,7 @@ class EmailTools
      *
      * @return mixed
      */
-    private function getSetting(string $key)
+    protected function getSetting(string $key)
     {
         return isset(self::$settings[$key]) ? self::$settings[$key] : null;
     }
@@ -297,7 +321,7 @@ class EmailTools
      *
      * @return array
      */
-    private function smtpOptions()
+    protected function smtpOptions()
     {
         $SMTPOptions = [];
         if (isset(self::$settings['lowsecure']) && self::$settings['lowsecure']) {
@@ -311,5 +335,14 @@ class EmailTools
         }
 
         return $SMTPOptions;
+    }
+
+    /**
+     * 
+     * @return ToolBox
+     */
+    protected static function toolBox()
+    {
+        return new ToolBox();
     }
 }

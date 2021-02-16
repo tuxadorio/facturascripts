@@ -20,7 +20,7 @@
 namespace FacturaScripts\Core\Model;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Dinamic\Model\LineaPresupuestoProveedor;
+use FacturaScripts\Dinamic\Model\LineaPresupuestoProveedor as LineaPresupuesto;
 
 /**
  * Supplier order.
@@ -42,11 +42,11 @@ class PresupuestoProveedor extends Base\PurchaseDocument
     /**
      * Returns the lines associated with the order.
      *
-     * @return LineaPresupuestoProveedor[]
+     * @return LineaPresupuesto[]
      */
     public function getLines()
     {
-        $lineaModel = new LineaPresupuestoProveedor();
+        $lineaModel = new LineaPresupuesto();
         $where = [new DataBaseWhere('idpresupuesto', $this->idpresupuesto)];
         $order = ['orden' => 'DESC', 'idlinea' => 'ASC'];
 
@@ -57,20 +57,18 @@ class PresupuestoProveedor extends Base\PurchaseDocument
      * Returns a new line for this document.
      *
      * @param array $data
+     * @param array $exclude
      *
-     * @return LineaPresupuestoProveedor
+     * @return LineaPresupuesto
      */
-    public function getNewLine(array $data = [])
+    public function getNewLine(array $data = [], array $exclude = ['actualizastock', 'idlinea', 'idpresupuesto'])
     {
-        $newLine = new LineaPresupuestoProveedor($data);
+        $newLine = new LineaPresupuesto();
         $newLine->idpresupuesto = $this->idpresupuesto;
-        if (empty($data)) {
-            $newLine->irpf = $this->irpf;
-        }
+        $newLine->irpf = $this->irpf;
+        $newLine->actualizastock = $this->getStatus()->actualizastock;
 
-        $status = $this->getStatus();
-        $newLine->actualizastock = $status->actualizastock;
-
+        $newLine->loadFromData($data, $exclude);
         return $newLine;
     }
 

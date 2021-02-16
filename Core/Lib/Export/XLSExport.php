@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,132 +18,115 @@
  */
 namespace FacturaScripts\Core\Lib\Export;
 
-use FacturaScripts\Core\Base;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Core\Model\Base\BusinessDocument;
+use FacturaScripts\Core\Model\Base\ModelClass;
 use Symfony\Component\HttpFoundation\Response;
+use XLSXWriter;
 
 /**
  * XLS export data.
  *
  * @author Carlos García Gómez <carlos@facturascripts.com>
  */
-class XLSExport implements ExportInterface
+class XLSExport extends ExportBase
 {
 
-    const LIST_LIMIT = 1000;
+    const LIST_LIMIT = 10000;
 
     /**
-     * Translator object
      *
-     * @var Base\Translator
+     * @var int
      */
-    private $i18n;
-
-    /**
-     * Class with number tools (to format numbers)
-     *
-     * @var Base\NumberTools
-     */
-    private $numberTools;
+    protected $numSheets = 0;
 
     /**
      * XLSX object.
      *
-     * @var \XLSXWriter
+     * @var XLSXWriter
      */
-    private $writer;
-
-    /**
-     * PDFExport constructor.
-     */
-    public function __construct()
-    {
-        $this->i18n = new Base\Translator();
-        $this->numberTools = new Base\NumberTools();
-    }
+    protected $writer;
 
     /**
      * Adds a new page with the document data.
      *
-     * @param mixed $model
+     * @param BusinessDocument $model
+     *
+     * @return bool
      */
-    public function generateBusinessDocPage($model)
+    public function addBusinessDocPage($model): bool
     {
-        $headers = [
-            'reference' => $this->i18n->trans('reference'),
-            'description' => $this->i18n->trans('description'),
-            'quantity' => $this->i18n->trans('quantity'),
-            'price' => $this->i18n->trans('price'),
-            'discount' => $this->i18n->trans('discount'),
-            'tax' => $this->i18n->trans('tax'),
-            'total' => $this->i18n->trans('total'),
-        ];
-        $tableData = [];
-        foreach ($model->getlines() as $line) {
-            $tableData[] = [
-                'reference' => Base\Utils::fixHtml($line->referencia),
-                'description' => Base\Utils::fixHtml($line->descripcion),
-                'quantity' => $this->numberTools->format($line->cantidad),
-                'price' => $this->numberTools->format($line->pvpunitario),
-                'discount' => $this->numberTools->format($line->dtopor),
-                'tax' => $this->numberTools->format($line->iva),
-                'total' => $this->numberTools->format($line->pvptotal),
-            ];
+        /// lines
+        $cursor = [];
+        $lineHeaders = [];
+        foreach ($model->getLines() as $line) {
+            if (empty($lineHeaders)) {
+                $lineHeaders = $this->getModelHeaders($line);
+            }
+
+            $cursor[] = $line;
         }
-        $this->generateTablePage($headers, $tableData);
-        $this->generateModelPage($model, [], 'doc');
+
+        $lineRows = $this->getCursorRawData($cursor);
+        $this->writer->writeSheet($lineRows, $this->toolBox()->i18n()->trans('lines'), $lineHeaders);
+
+        /// model
+        $headers = $this->getModelHeaders($model);
+        $rows = $this->getCursorRawData([$model]);
+        $this->writer->writeSheet($rows, $model->primaryDescription(), $headers);
+
+        /// do not continue with export
+        return false;
     }
 
     /**
      * Adds a new page with a table listing all models data.
      *
-     * @param mixed                         $model
-     * @param Base\DataBase\DataBaseWhere[] $where
-     * @param array                         $order
-     * @param int                           $offset
-     * @param array                         $columns
-     * @param string                        $title
+     * @param ModelClass      $model
+     * @param DataBaseWhere[] $where
+     * @param array           $order
+     * @param int             $offset
+     * @param array           $columns
+     * @param string          $title
+     *
+     * @return bool
      */
-    public function generateListModelPage($model, $where, $order, $offset, $columns, $title = '')
+    public function addListModelPage($model, $where, $order, $offset, $columns, $title = ''): bool
     {
-        /// Get the columns
-        $tableCols = [];
-        $sheetHeaders = [];
-        $tableData = [];
+        $this->setFileName($title);
 
-        /// Get the columns
-        $this->setTableColumns($columns, $tableCols, $sheetHeaders);
-
+        $headers = $this->getModelHeaders($model);
         $cursor = $model->all($where, $order, $offset, self::LIST_LIMIT);
         if (empty($cursor)) {
-            $this->writer->writeSheet($tableData, $title, $sheetHeaders);
+            $this->writer->writeSheet([], $title, $headers);
         }
         while (!empty($cursor)) {
-            $tableData = $this->getTableData($cursor, $tableCols);
-            $this->writer->writeSheet($tableData, $title, $sheetHeaders);
+            $rows = $this->getCursorRawData($cursor);
+            $this->writer->writeSheet($rows, $title, $headers);
 
             /// Advance within the results
             $offset += self::LIST_LIMIT;
             $cursor = $model->all($where, $order, $offset, self::LIST_LIMIT);
         }
+
+        return true;
     }
 
     /**
      * Adds a new page with the model data.
      *
-     * @param mixed  $model
-     * @param array  $columns
-     * @param string $title
+     * @param ModelClass $model
+     * @param array      $columns
+     * @param string     $title
+     *
+     * @return bool
      */
-    public function generateModelPage($model, $columns, $title = '')
+    public function addModelPage($model, $columns, $title = ''): bool
     {
-        $tableData = [];
-        foreach ((array) $model as $key => $value) {
-            if (is_string($value)) {
-                $tableData[] = ['key' => $key, 'value' => $value];
-            }
-        }
-
-        $this->writer->writeSheet($tableData, $title, ['key' => 'string', 'value' => 'string']);
+        $headers = $this->getModelHeaders($model);
+        $rows = $this->getCursorRawData([$model]);
+        $this->writer->writeSheet($rows, $title, $headers);
+        return true;
     }
 
     /**
@@ -151,14 +134,20 @@ class XLSExport implements ExportInterface
      *
      * @param array $headers
      * @param array $rows
+     *
+     * @return bool
      */
-    public function generateTablePage($headers, $rows)
+    public function addTablePage($headers, $rows): bool
     {
-        $this->writer->writeSheetRow('sheet1', $headers);
+        $this->numSheets++;
+        $sheetName = 'sheet' . $this->numSheets;
 
+        $this->writer->writeSheetRow($sheetName, $headers);
         foreach ($rows as $row) {
-            $this->writer->writeSheetRow('sheet1', $row);
+            $this->writer->writeSheetRow($sheetName, $row);
         }
+
+        return true;
     }
 
     /**
@@ -173,11 +162,24 @@ class XLSExport implements ExportInterface
 
     /**
      * Blank document.
+     *
+     * @param string $title
      */
-    public function newDoc()
+    public function newDoc(string $title)
     {
-        $this->writer = new \XLSXWriter();
+        $this->setFileName($title);
+        $this->writer = new XLSXWriter();
         $this->writer->setAuthor('FacturaScripts');
+        $this->writer->setTitle($title);
+    }
+
+    /**
+     *
+     * @param string $orientation
+     */
+    public function setOrientation(string $orientation)
+    {
+        /// Not implemented
     }
 
     /**
@@ -188,56 +190,70 @@ class XLSExport implements ExportInterface
     public function show(Response &$response)
     {
         $response->headers->set('Content-Type', 'text/vnd.ms-excel; charset=utf-8');
-        $response->headers->set('Content-Disposition', 'attachment;filename=doc.xlsx');
+        $response->headers->set('Content-Disposition', 'attachment;filename=' . $this->getFileName() . '.xlsx');
         $response->setContent($this->getDoc());
     }
 
     /**
-     * Returns the table data
      *
-     * @param array $cursor
-     * @param array $tableCols
+     * @param array $columns
      *
      * @return array
      */
-    private function getTableData($cursor, $tableCols)
+    protected function getColumnHeaders($columns): array
     {
-        $tableData = [];
-
-        /// Get the data
-        foreach ($cursor as $key => $row) {
-            foreach ($tableCols as $col) {
-                if (!isset($row->{$col}) || null === $row->{$col}) {
-                    $tableData[$key][$col] = '';
-                    continue;
-                }
-
-                $tableData[$key][$col] = $row->{$col};
-            }
+        $headers = [];
+        foreach ($this->getColumnTitles($columns) as $col) {
+            $headers[$col] = 'string';
         }
 
-        return $tableData;
+        return $headers;
     }
 
     /**
-     * Set the table content.
      *
-     * @param $columns
-     * @param $tableCols
-     * @param $sheetHeaders
+     * @param array $cursor
+     * @param array $fields
+     *
+     * @return array
      */
-    private function setTableColumns(&$columns, &$tableCols, &$sheetHeaders)
+    protected function getCursorRawData($cursor, $fields = []): array
     {
-        foreach ($columns as $col) {
-            if (isset($col->columns)) {
-                $this->setTableColumns($col->columns, $tableCols, $sheetHeaders);
-                continue;
-            }
-
-            if (!$col->hidden()) {
-                $tableCols[$col->widget->fieldname] = $col->widget->fieldname;
-                $sheetHeaders[$col->widget->fieldname] = 'string';
+        $data = parent::getCursorRawData($cursor, $fields);
+        foreach ($data as $num => $row) {
+            foreach ($row as $key => $value) {
+                $data[$num][$key] = $this->toolBox()->utils()->fixHtml($value);
             }
         }
+
+        return $data;
+    }
+
+    /**
+     *
+     * @param ModelClass $model
+     *
+     * @return array
+     */
+    protected function getModelHeaders($model): array
+    {
+        $headers = [];
+        $modelFields = $model->getModelFields();
+        foreach ($this->getModelFields($model) as $key) {
+            switch ($modelFields[$key]['type']) {
+                case 'int':
+                    $headers[$key] = 'integer';
+                    break;
+
+                case 'double':
+                    $headers[$key] = 'price';
+                    break;
+
+                default:
+                    $headers[$key] = 'string';
+            }
+        }
+
+        return $headers;
     }
 }

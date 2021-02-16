@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,16 +18,14 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\ListController;
 
 /**
  * Controller to list the items in the Atributo model
  *
- * @author Carlos García Gómez          <carlos@facturascripts.com>
- * @author Artex Trading sa             <jcuello@artextrading.com>
- * @author Fco. Antonio Moreno Pérez    <famphuelva@gmail.com>
+ * @author Carlos García Gómez <carlos@facturascripts.com>
  */
-class ListAtributo extends ExtendedController\ListController
+class ListAtributo extends ListController
 {
 
     /**
@@ -37,12 +35,11 @@ class ListAtributo extends ExtendedController\ListController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'attributes';
-        $pagedata['icon'] = 'fas fa-sliders-h';
-        $pagedata['menu'] = 'warehouse';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'warehouse';
+        $data['title'] = 'attributes';
+        $data['icon'] = 'fas fa-tshirt';
+        return $data;
     }
 
     /**
@@ -50,13 +47,14 @@ class ListAtributo extends ExtendedController\ListController
      */
     protected function createViews()
     {
-        $this->addView('ListAtributo', 'Atributo', 'attributes', 'fas fa-sliders-h');
+        $this->addView('ListAtributo', 'Atributo', 'attributes', 'fas fa-tshirt');
         $this->addSearchFields('ListAtributo', ['nombre', 'codatributo']);
         $this->addOrderBy('ListAtributo', ['codatributo'], 'code');
         $this->addOrderBy('ListAtributo', ['nombre'], 'name');
 
-        $this->addView('EditAtributoValor', 'AtributoValor', 'values', 'fas fa-list');
-        $this->addSearchFields('EditAtributoValor', ['valor', 'codatributo']);
-        $this->addOrderBy('EditAtributoValor', ['codatributo'], 'code');
+        $this->addView('ListAtributoValor', 'AtributoValor', 'values', 'fas fa-list');
+        $this->addSearchFields('ListAtributoValor', ['valor', 'codatributo']);
+        $this->addOrderBy('ListAtributoValor', ['codatributo', 'orden', 'valor'], 'sort', 2);
+        $this->addOrderBy('ListAtributoValor', ['codatributo', 'valor'], 'value');
     }
 }

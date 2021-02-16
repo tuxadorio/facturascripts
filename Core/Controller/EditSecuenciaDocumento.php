@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2019-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -46,12 +46,20 @@ class EditSecuenciaDocumento extends EditController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'document-sequence';
-        $pagedata['menu'] = 'admin';
-        $pagedata['icon'] = 'fas fa-code';
-        $pagedata['showonmenu'] = false;
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['title'] = 'document-sequence';
+        $data['icon'] = 'fas fa-code';
+        return $data;
+    }
 
-        return $pagedata;
+    protected function createViews()
+    {
+        parent::createViews();
+
+        /// disable company column if there is only one company
+        if ($this->empresa->count() < 2) {
+            $this->views[$this->getMainViewName()]->disableColumn('company');
+        }
     }
 }

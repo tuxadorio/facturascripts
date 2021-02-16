@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,14 +19,12 @@
 namespace FacturaScripts\Core\Base;
 
 /**
- * Class to manage the actions with folders and files
+ * Class to manage the actions with folders and files.
  *
- * @package FacturaScripts\Core\Base
- *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Cristo M. Estévez Hernández <cristom.estevez@gmail.com>
- * @author Francesc Pineda Segarra <francesc.pineda@x-netdigital.com>
- * @author Raul Jimenez <raul.jimenez@nazcanetworks.com>
+ * @author Carlos García Gómez          <carlos@facturascripts.com>
+ * @author Cristo M. Estévez Hernández  <cristom.estevez@gmail.com>
+ * @author Francesc Pineda Segarra      <francesc.pineda@x-netdigital.com>
+ * @author Raul Jimenez                 <raul.jimenez@nazcanetworks.com>
  */
 class FileManager
 {
@@ -72,7 +70,7 @@ class FileManager
             return true;
         }
 
-        $files = is_dir($folder) ? static::scanFolder($folder) : [];
+        $files = is_dir($folder) ? static::scanFolder($folder, false, ['.', '..']) : [];
         foreach ($files as $file) {
             $path = $folder . DIRECTORY_SEPARATOR . $file;
             is_dir($path) ? static::delTree($path) : unlink($path);
@@ -217,7 +215,7 @@ class FileManager
     public static function notWritableFolders(): array
     {
         $notwritable = [];
-        foreach (static::scanFolder(FS_FOLDER, true) as $folder) {
+        foreach (static::scanFolder(\FS_FOLDER, true) as $folder) {
             if (is_dir($folder) && !is_writable($folder)) {
                 $notwritable[] = $folder;
             }

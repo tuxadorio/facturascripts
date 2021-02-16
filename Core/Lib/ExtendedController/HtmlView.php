@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,8 +18,8 @@
  */
 namespace FacturaScripts\Core\Lib\ExtendedController;
 
-use FacturaScripts\Core\Lib\ExportManager;
-use FacturaScripts\Core\Model\User;
+use FacturaScripts\Dinamic\Lib\ExportManager;
+use FacturaScripts\Dinamic\Model\User;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -50,10 +50,12 @@ class HtmlView extends BaseView
      * Method to export the view data.
      *
      * @param ExportManager $exportManager
+     *
+     * @return bool
      */
-    public function export(&$exportManager)
+    public function export(&$exportManager): bool
     {
-        ;
+        return true;
     }
 
     /**
@@ -64,18 +66,22 @@ class HtmlView extends BaseView
      * @param int    $offset
      * @param int    $limit
      */
-    public function loadData($code = false, $where = [], $order = [], $offset = 0, $limit = FS_ITEM_LIMIT)
+    public function loadData($code = '', $where = [], $order = [], $offset = 0, $limit = \FS_ITEM_LIMIT)
     {
         if (empty($code) && empty($where)) {
             return;
         }
 
         $this->model->loadFromCode($code, $where, $order);
+        if (false === empty($where)) {
+            $this->count = $this->model->count($where);
+            $this->cursor = $this->model->all($where, $order, $offset, $limit);
+        }
     }
 
     /**
      * 
-     * @param User $user
+     * @param User|false $user
      */
     public function loadPageOptions($user = false)
     {

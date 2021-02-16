@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,6 +18,7 @@
  */
 namespace FacturaScripts\Core\Lib\ExtendedController;
 
+use FacturaScripts\Core\Lib\ExtendedController\BusinessDocumentView;
 use FacturaScripts\Dinamic\Model\Proveedor;
 
 /**
@@ -30,43 +31,60 @@ abstract class PurchaseDocumentController extends BusinessDocumentController
 
     /**
      * 
+     * @return array
+     */
+    public function getCustomFields()
+    {
+        return [
+            [
+                'icon' => 'fas fa-hashtag',
+                'label' => 'numsupplier',
+                'name' => 'numproveedor'
+            ]
+        ];
+    }
+
+    /**
+     * 
      * @return string
      */
     public function getNewSubjectUrl()
     {
         $proveedor = new Proveedor();
-        return $proveedor->url('new');
+        return $proveedor->url('new') . '?return=' . $this->url();
     }
 
     /**
      * 
      * @return array
      */
-    public function getSubjectColumns()
+    public function getPageData()
     {
-        return ['codproveedor'];
+        $data = parent::getPageData();
+        $data['showonmenu'] = false;
+        return $data;
     }
 
     /**
      * 
-     * @param mixed $view
+     * @return string
      */
-    protected function loadCustomContactsWidget(&$view)
+    protected function getLineXMLView()
     {
-        ;
+        return 'PurchaseDocumentLine';
     }
 
     /**
      * 
-     * @param mixed $view
-     * @param array $formData
+     * @param BusinessDocumentView $view
+     * @param array                $formData
      * 
      * @return string
      */
     protected function setSubject(&$view, $formData)
     {
         if (empty($formData['codproveedor'])) {
-            return 'ERROR: ' . $this->i18n->trans('supplier-not-found');
+            return 'ERROR: ' . $this->toolBox()->i18n()->trans('supplier-not-found');
         }
 
         if ($view->model->codproveedor === $formData['codproveedor']) {
@@ -79,6 +97,6 @@ abstract class PurchaseDocumentController extends BusinessDocumentController
             return 'OK';
         }
 
-        return 'ERROR: ' . $this->i18n->trans('supplier-not-found');
+        return 'ERROR: ' . $this->toolBox()->i18n()->trans('supplier-not-found');
     }
 }

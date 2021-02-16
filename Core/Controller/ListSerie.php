@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,15 +18,15 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\ListController;
 
 /**
  * Controller to list the items in the Serie model
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Artex Trading sa <jcuello@artextrading.com>
+ * @author Carlos García Gómez  <carlos@facturascripts.com>
+ * @author Artex Trading sa     <jcuello@artextrading.com>
  */
-class ListSerie extends ExtendedController\ListController
+class ListSerie extends ListController
 {
 
     /**
@@ -36,12 +36,11 @@ class ListSerie extends ExtendedController\ListController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'series';
-        $pagedata['icon'] = 'fas fa-file-alt';
-        $pagedata['menu'] = 'accounting';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'accounting';
+        $data['title'] = 'series';
+        $data['icon'] = 'fas fa-layer-group';
+        return $data;
     }
 
     /**
@@ -49,9 +48,8 @@ class ListSerie extends ExtendedController\ListController
      */
     protected function createViews()
     {
-        $this->addView('ListSerie', 'Serie', 'series', 'fas fa-file-alt');
+        $this->addView('ListSerie', 'Serie', 'series', 'fas fa-layer-group');
         $this->addSearchFields('ListSerie', ['descripcion', 'codserie']);
-
         $this->addOrderBy('ListSerie', ['codserie'], 'code');
         $this->addOrderBy('ListSerie', ['descripcion'], 'description');
 

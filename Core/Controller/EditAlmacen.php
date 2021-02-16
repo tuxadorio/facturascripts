@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,20 +18,24 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
+use FacturaScripts\Core\Lib\ExtendedController\BaseView;
+use FacturaScripts\Core\Lib\ExtendedController\EditController;
 
 /**
  * Controller to edit a single item from the Almacen model
  *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Artex Trading sa <jcuello@artextrading.com>
- * @author Francesc Pineda Segarra <francesc.pineda.segarra@gmail.com>
+ * @author Carlos García Gómez      <carlos@facturascripts.com>
+ * @author Artex Trading sa         <jcuello@artextrading.com>
+ * @author Francesc Pineda Segarra  <francesc.pineda.segarra@gmail.com>
  */
-class EditAlmacen extends ExtendedController\EditController
+class EditAlmacen extends EditController
 {
 
     /**
-     * Returns the model name
+     * Returns the model name.
+     * 
+     * @return string
      */
     public function getModelClassName()
     {
@@ -39,18 +43,71 @@ class EditAlmacen extends ExtendedController\EditController
     }
 
     /**
-     * Returns basic page attributes
+     * Returns basic page attributes.
      *
      * @return array
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'warehouse';
-        $pagedata['menu'] = 'warehouse';
-        $pagedata['icon'] = 'fas fa-building';
-        $pagedata['showonmenu'] = false;
+        $data = parent::getPageData();
+        $data['menu'] = 'warehouse';
+        $data['title'] = 'warehouse';
+        $data['icon'] = 'fas fa-warehouse';
+        return $data;
+    }
 
-        return $pagedata;
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createStockView(string $viewName = 'ListStock')
+    {
+        $this->addListView($viewName, 'Stock', 'stock', 'fas fa-cubes');
+        $this->views[$viewName]->addOrderBy(['referencia'], 'reference', 1);
+        $this->views[$viewName]->addOrderBy(['cantidad'], 'quantity');
+        $this->views[$viewName]->searchFields = ['referencia'];
+
+        /// disable column
+        $this->views[$viewName]->disableColumn('warehouse');
+
+        /// disable buttons
+        $this->setSettings($viewName, 'btnNew', false);
+    }
+
+    /**
+     * Add tabs or views.
+     */
+    protected function createViews()
+    {
+        parent::createViews();
+        $this->setTabsPosition('bottom');
+
+        /// disable company column if there is only one company
+        if ($this->empresa->count() < 2) {
+            $this->views[$this->getMainViewName()]->disableColumn('company');
+        }
+
+        $this->createStockView();
+    }
+
+    /**
+     * Load data view procedure
+     *
+     * @param string   $viewName
+     * @param BaseView $view
+     */
+    protected function loadData($viewName, $view)
+    {
+        switch ($viewName) {
+            case 'ListStock':
+                $codalmacen = $this->getViewModelValue($this->getMainViewName(), 'codalmacen');
+                $where = [new DataBaseWhere('codalmacen', $codalmacen)];
+                $view->loadData('', $where);
+                break;
+
+            default:
+                parent::loadData($viewName, $view);
+                break;
+        }
     }
 }

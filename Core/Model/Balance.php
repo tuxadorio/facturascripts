@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2018 Carlos Garcia Gomez  <carlos@facturascripts.com>
+ * Copyright (C) 2013-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -17,8 +17,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 namespace FacturaScripts\Core\Model;
-
-use FacturaScripts\Core\Base\Utils;
 
 /**
  * Defines which accounts must be used to generate the different accounting reports.
@@ -141,12 +139,33 @@ class Balance extends Base\ModelClass
      */
     public function test()
     {
-        $this->descripcion1 = Utils::noHtml($this->descripcion1);
-        $this->descripcion2 = Utils::noHtml($this->descripcion2);
-        $this->descripcion3 = Utils::noHtml($this->descripcion3);
-        $this->descripcion4 = Utils::noHtml($this->descripcion4);
-        $this->descripcion4ba = Utils::noHtml($this->descripcion4ba);
+        if (1 !== \preg_match('/^[A-Z0-9_\+\.\-]{1,15}$/i', $this->codbalance)) {
+            $this->toolBox()->i18nLog()->error(
+                'invalid-alphanumeric-code',
+                ['%value%' => $this->codbalance, '%column%' => 'codbalance', '%min%' => '1', '%max%' => '15']
+            );
+            return false;
+        }
 
+        $utils = $this->toolBox()->utils();
+        $this->descripcion1 = $utils->noHtml($this->descripcion1);
+        $this->descripcion2 = $utils->noHtml($this->descripcion2);
+        $this->descripcion3 = $utils->noHtml($this->descripcion3);
+        $this->descripcion4 = $utils->noHtml($this->descripcion4);
+        $this->descripcion4ba = $utils->noHtml($this->descripcion4ba);
         return parent::test();
+    }
+
+    /**
+     * Returns the url where to see / modify the data.
+     *
+     * @param string $type
+     * @param string $list
+     *
+     * @return string
+     */
+    public function url(string $type = 'auto', string $list = 'ListReportAccounting?activetab=List'): string
+    {
+        return parent::url($type, $list);
     }
 }

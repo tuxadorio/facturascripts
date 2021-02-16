@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,9 +18,10 @@
  */
 namespace FacturaScripts\Core\Model;
 
-use FacturaScripts\Core\App\AppSettings;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Base\Utils;
+use FacturaScripts\Dinamic\Model\Asiento as DinAsiento;
+use FacturaScripts\Dinamic\Model\Divisa as DinDivisa;
+use FacturaScripts\Dinamic\Model\Subcuenta as DinSubcuenta;
 
 /**
  * The line of a accounting entry.
@@ -33,6 +34,7 @@ class Partida extends Base\ModelOnChangeClass
 {
 
     use Base\ModelTrait;
+    use Base\AccEntryRelationTrait;
 
     /**
      * Amount of the tax base.
@@ -105,9 +107,9 @@ class Partida extends Base\ModelOnChangeClass
     public $documento;
 
     /**
-     * Invoice of the departure.
+     * Invoice number of the departure.
      *
-     * @var
+     * @var string
      */
     public $factura;
 
@@ -124,13 +126,6 @@ class Partida extends Base\ModelOnChangeClass
      * @var float|int
      */
     public $haberme;
-
-    /**
-     * Related accounting entry ID.
-     *
-     * @var int
-     */
-    public $idasiento;
 
     /**
      * Identifier of the counterpart.
@@ -195,7 +190,7 @@ class Partida extends Base\ModelOnChangeClass
     {
         parent::clear();
         $this->baseimponible = 0.0;
-        $this->coddivisa = AppSettings::get('default', 'coddivisa');
+        $this->coddivisa = $this->toolBox()->appSettings()->get('default', 'coddivisa');
         $this->debe = 0.0;
         $this->debeme = 0.0;
         $this->haber = 0.0;
@@ -208,37 +203,41 @@ class Partida extends Base\ModelOnChangeClass
     }
 
     /**
-     * 
-     * @return Asiento
-     */
-    public function getAsiento()
-    {
-        $asiento = new Asiento();
-        $asiento->loadFromCode($this->idasiento);
-        return $asiento;
-    }
-
-    /**
-     * 
+     *
      * @param string $codsubcuenta
      *
-     * @return Subcuenta
+     * @return DinSubcuenta
      */
     public function getSubcuenta($codsubcuenta = '')
     {
-        $subcuenta = new Subcuenta();
-        if (empty($codsubcuenta)) {
-            $subcuenta->loadFromCode($this->idsubcuenta);
-            return $subcuenta;
+        $accEntry = $this->getAccountingEntry();
+        $subcta = new DinSubcuenta();
+
+        /// get by parameter
+        if (!empty($codsubcuenta)) {
+            $where = [
+                new DataBaseWhere('codejercicio', $accEntry->codejercicio),
+                new DataBaseWhere('codsubcuenta', $codsubcuenta)
+            ];
+            $subcta->loadFromCode('', $where);
+            return $subcta;
         }
 
-        $asiento = $this->getAsiento();
-        $where = [
-            new DataBaseWhere('codejercicio', $asiento->codejercicio),
+        /// get by id
+        if (!empty($this->idsubcuenta) &&
+            $subcta->loadFromCode($this->idsubcuenta) &&
+            $subcta->codsubcuenta === $this->codsubcuenta &&
+            $subcta->codejercicio === $accEntry->codejercicio) {
+            return $subcta;
+        }
+
+        /// get by code and exercise
+        $where2 = [
+            new DataBaseWhere('codejercicio', $accEntry->codejercicio),
             new DataBaseWhere('codsubcuenta', $this->codsubcuenta)
         ];
-        $subcuenta->loadFromCode('', $where);
-        return $subcuenta;
+        $subcta->loadFromCode('', $where2);
+        return $subcta;
     }
 
     /**
@@ -250,8 +249,9 @@ class Partida extends Base\ModelOnChangeClass
      */
     public function install()
     {
-        new Asiento();
-        new Subcuenta();
+        new DinDivisa();
+        new DinAsiento();
+        new DinSubcuenta();
 
         return parent::install();
     }
@@ -264,6 +264,26 @@ class Partida extends Base\ModelOnChangeClass
     public static function primaryColumn()
     {
         return 'idpartida';
+    }
+
+    /**
+     *
+     * @param Subcuenta $subaccount
+     */
+    public function setAccount($subaccount)
+    {
+        $this->codsubcuenta = $subaccount->codsubcuenta;
+        $this->idsubcuenta = $subaccount->idsubcuenta;
+    }
+
+    /**
+     *
+     * @param Subcuenta $subaccount
+     */
+    public function setCounterpart($subaccount)
+    {
+        $this->codcontrapartida = $subaccount->codsubcuenta;
+        $this->idcontrapartida = $subaccount->idsubcuenta;
     }
 
     /**
@@ -283,29 +303,47 @@ class Partida extends Base\ModelOnChangeClass
      */
     public function test(): bool
     {
-        $this->cifnif = Utils::noHtml($this->cifnif);
-        $this->codsubcuenta = trim($this->codsubcuenta);
-        $this->codcontrapartida = trim($this->codcontrapartida);
-        $this->concepto = Utils::noHtml($this->concepto);
-        $this->documento = Utils::noHtml($this->documento);
+        $utils = $this->toolBox()->utils();
+        $this->cifnif = $utils->noHtml($this->cifnif);
+        $this->codsubcuenta = \trim($this->codsubcuenta);
+        $this->codcontrapartida = \trim($this->codcontrapartida);
+        $this->concepto = $utils->noHtml($this->concepto);
+        $this->documento = $utils->noHtml($this->documento);
 
-        if (strlen($this->concepto) < 1 || strlen($this->concepto) > 255) {
-            self::$miniLog->alert(self::$i18n->trans('invalid-column-lenght', ['%column%' => 'concepto', '%min%' => '1', '%max%' => '255']));
+        if (\strlen($this->concepto) < 1 || \strlen($this->concepto) > 255) {
+            $this->toolBox()->i18nLog()->warning('invalid-column-lenght', ['%column%' => 'concepto', '%min%' => '1', '%max%' => '255']);
             return false;
         }
 
-        if ($this->testErrorInData()) {
-            self::$miniLog->alert(self::$i18n->trans('accounting-data-missing'));
-            return false;
+        /// set missing subaccount id
+        if (empty($this->idsubcuenta)) {
+            $this->idsubcuenta = $this->getSubcuenta()->idsubcuenta;
+        }
+
+        /// set missing contrapartida id
+        if (!empty($this->codcontrapartida) && empty($this->idcontrapartida)) {
+            $this->idcontrapartida = $this->getSubcuenta($this->codcontrapartida)->idsubcuenta;
         }
 
         return parent::test();
     }
 
     /**
-     * This mehtod is called before this record is save (update) in the database
+     *
+     * @param string $type
+     * @param string $list
+     *
+     * @return string
+     */
+    public function url(string $type = 'auto', string $list = 'List')
+    {
+        return $this->getAccountingEntry()->url($type, $list);
+    }
+
+    /**
+     * This method is called before this record is save (update) in the database
      * when some field value is changed.
-     * 
+     *
      * @param string $field
      *
      * @return bool
@@ -313,19 +351,12 @@ class Partida extends Base\ModelOnChangeClass
     protected function onChange($field)
     {
         switch ($field) {
-            case 'codsubcuenta':
-                $subcuenta = $this->getSubcuenta($this->codsubcuenta);
-                $this->idsubcuenta = $subcuenta->idsubcuenta;
+            case 'codcontrapartida':
+                $this->idcontrapartida = $this->getSubcuenta($this->codcontrapartida)->idsubcuenta;
                 break;
 
-            case 'debe':
-            case 'haber':
-                $debit = $this->debe - $this->previousData['debe'];
-                $credit = $this->haber - $this->previousData['haber'];
-
-                /// update account balance
-                $asiento = $this->getAsiento();
-                $this->getSubcuenta()->updateBalance($asiento->fecha, $debit, $credit);
+            case 'codsubcuenta':
+                $this->idsubcuenta = $this->getSubcuenta($this->codsubcuenta)->idsubcuenta;
                 break;
         }
 
@@ -338,8 +369,8 @@ class Partida extends Base\ModelOnChangeClass
     protected function onDelete()
     {
         /// update account balance
-        $asiento = $this->getAsiento();
-        $this->getSubcuenta()->updateBalance($asiento->fecha, ($this->debe * -1), ($this->haber * -1));
+        $this->updateBalance($this->idsubcuenta);
+        parent::onDelete();
     }
 
     /**
@@ -348,36 +379,45 @@ class Partida extends Base\ModelOnChangeClass
     protected function onInsert()
     {
         /// update account balance
-        $asiento = $this->getAsiento();
-        $this->getSubcuenta()->updateBalance($asiento->fecha, $this->debe, $this->haber);
+        $this->updateBalance($this->idsubcuenta);
+        parent::onInsert();
     }
 
     /**
-     * 
+     * This method is called after a record is updated on the database.
+     */
+    protected function onUpdate()
+    {
+        $this->updateBalance($this->idsubcuenta);
+
+        /// Has the subaccount been changed? Then we recalculate the balance of the old one too.
+        if ($this->previousData['idsubcuenta'] != $this->idsubcuenta) {
+            $this->updateBalance($this->previousData['idsubcuenta']);
+        }
+
+        parent::onUpdate();
+    }
+
+    /**
+     *
      * @param array $fields
      */
-    protected function setPreviousData(array $fields = array())
+    protected function setPreviousData(array $fields = [])
     {
-        $more = ['codsubcuenta', 'debe', 'haber'];
-        parent::setPreviousData(array_merge($more, $fields));
+        $more = ['codcontrapartida', 'codsubcuenta', 'debe', 'haber', 'idcontrapartida', 'idsubcuenta'];
+        parent::setPreviousData(\array_merge($more, $fields));
     }
 
     /**
-     * Check if exists error in accounting entry
+     * Update the subaccount balance.
      *
-     * @return bool
+     * @param int $idsubaccount
      */
-    private function testErrorInData(): bool
+    private function updateBalance($idsubaccount)
     {
-        if (empty($this->idasiento) || empty($this->codsubcuenta)) {
-            return true;
+        $subaccount = new DinSubcuenta();
+        if ($subaccount->loadFromCode($idsubaccount)) {
+            $subaccount->updateBalance();
         }
-
-        if (empty($this->idsubcuenta)) {
-            $subcuenta = $this->getSubcuenta($this->codsubcuenta);
-            $this->idsubcuenta = $subcuenta->idsubcuenta;
-        }
-
-        return empty($this->idsubcuenta);
     }
 }

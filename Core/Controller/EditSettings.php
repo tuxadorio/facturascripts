@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -18,12 +18,11 @@
  */
 namespace FacturaScripts\Core\Controller;
 
-use FacturaScripts\Core\App\AppSettings;
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Base\FileManager;
-use FacturaScripts\Core\Lib\ExtendedController;
-use FacturaScripts\Dinamic\Lib\EmailTools;
-use FacturaScripts\Dinamic\Model\CodeModel;
+use FacturaScripts\Core\Lib\ExtendedController\EditView;
+use FacturaScripts\Core\Lib\ExtendedController\PanelController;
+use FacturaScripts\Dinamic\Lib\Email\NewMail;
+use FacturaScripts\Dinamic\Model\Impuesto;
 
 /**
  * Controller to edit main settings
@@ -31,7 +30,7 @@ use FacturaScripts\Dinamic\Model\CodeModel;
  * @author Artex Trading sa     <jcuello@artextrading.com>
  * @author Carlos Garcia Gomez  <carlos@facturascripts.com>
  */
-class EditSettings extends ExtendedController\PanelController
+class EditSettings extends PanelController
 {
 
     const KEY_SETTINGS = 'Settings';
@@ -43,13 +42,12 @@ class EditSettings extends ExtendedController\PanelController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'app-preferences';
-        $pagedata['icon'] = 'fas fa-cogs';
-        $pagedata['menu'] = 'admin';
-        $pagedata['submenu'] = 'control-panel';
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['submenu'] = 'control-panel';
+        $data['title'] = 'app-preferences';
+        $data['icon'] = 'fas fa-cogs';
+        return $data;
     }
 
     /**
@@ -60,7 +58,7 @@ class EditSettings extends ExtendedController\PanelController
     private function allSettingsXMLViews()
     {
         $names = [];
-        foreach (FileManager::scanFolder(FS_FOLDER . '/Dinamic/XMLView') as $fileName) {
+        foreach ($this->toolBox()->files()->scanFolder(\FS_FOLDER . '/Dinamic/XMLView') as $fileName) {
             if (0 === strpos($fileName, self::KEY_SETTINGS)) {
                 $names[] = substr($fileName, 0, -4);
             }
@@ -69,14 +67,17 @@ class EditSettings extends ExtendedController\PanelController
         return $names;
     }
 
+    /**
+     * 
+     * @return bool
+     */
     protected function checkPaymentMethod()
     {
-        $appSettings = new AppSettings();
-        $appSettings->reload();
+        $appSettings = $this->toolBox()->appSettings();
 
         $idempresa = $appSettings->get('default', 'idempresa');
         $where = [new DataBaseWhere('idempresa', $idempresa)];
-        $values = CodeModel::all('formaspago', 'codpago', 'descripcion', false, $where);
+        $values = $this->codeModel->all('formaspago', 'codpago', 'descripcion', false, $where);
         foreach ($values as $value) {
             if ($value->code == $appSettings->get('default', 'codpago')) {
                 /// perfect
@@ -94,16 +95,20 @@ class EditSettings extends ExtendedController\PanelController
         /// assign no payment method
         $appSettings->set('default', 'codpago', null);
         $appSettings->save();
+        return false;
     }
 
+    /**
+     * 
+     * @return bool
+     */
     protected function checkWarehouse()
     {
-        $appSettings = new AppSettings();
-        $appSettings->reload();
+        $appSettings = $this->toolBox()->appSettings();
 
         $idempresa = $appSettings->get('default', 'idempresa');
         $where = [new DataBaseWhere('idempresa', $idempresa)];
-        $values = CodeModel::all('almacenes', 'codalmacen', 'nombre', false, $where);
+        $values = $this->codeModel->all('almacenes', 'codalmacen', 'nombre', false, $where);
         foreach ($values as $value) {
             if ($value->code == $appSettings->get('default', 'codalmacen')) {
                 /// perfect
@@ -121,6 +126,31 @@ class EditSettings extends ExtendedController\PanelController
         /// assign no warehouse
         $appSettings->set('default', 'codalmacen', null);
         $appSettings->save();
+        return false;
+    }
+
+    /**
+     * 
+     * @return bool
+     */
+    protected function checkTax()
+    {
+        $appSettings = $this->toolBox()->appSettings();
+
+        /// find current default tax
+        $taxModel = new Impuesto();
+        $codimpuesto = $appSettings->get('default', 'codimpuesto');
+        if ($taxModel->loadFromCode($codimpuesto)) {
+            return true;
+        }
+
+        foreach ($taxModel->all() as $tax) {
+            $appSettings->set('default', 'codimpuesto', $tax->codimpuesto);
+            $appSettings->save();
+            break;
+        }
+
+        return false;
     }
 
     /**
@@ -145,8 +175,9 @@ class EditSettings extends ExtendedController\PanelController
                 }
             }
 
-            /// disable delete
+            /// disable buttons
             $this->setSettings($name, 'btnDelete', false);
+            $this->setSettings($name, 'btnNew', false);
         }
     }
 
@@ -156,13 +187,16 @@ class EditSettings extends ExtendedController\PanelController
      */
     protected function editAction()
     {
-        if (!parent::editAction()) {
+        if (false === parent::editAction()) {
             return false;
         }
 
-        /// check warehouse-company and payment-method-company relations
+        $this->toolBox()->appSettings()->reload();
+
+        /// check relations
         $this->checkPaymentMethod();
         $this->checkWarehouse();
+        $this->checkTax();
         return true;
     }
 
@@ -178,12 +212,15 @@ class EditSettings extends ExtendedController\PanelController
                 break;
 
             case 'testmail':
-                $emailTools = new EmailTools();
-                if ($emailTools->test()) {
-                    $this->miniLog->info($this->i18n->trans('mail-test-ok'));
-                } else {
-                    $this->miniLog->error($this->i18n->trans('mail-test-error'));
+                if (false === $this->editAction()) {
+                    break;
                 }
+                $email = new NewMail();
+                if ($email->test()) {
+                    $this->toolBox()->i18nLog()->notice('mail-test-ok');
+                    break;
+                }
+                $this->toolBox()->i18nLog()->error('mail-test-error');
                 break;
         }
     }
@@ -203,8 +240,8 @@ class EditSettings extends ExtendedController\PanelController
     /**
      * Load view data
      *
-     * @param string                      $viewName
-     * @param ExtendedController\EditView $view
+     * @param string   $viewName
+     * @param EditView $view
      */
     protected function loadData($viewName, $view)
     {
@@ -228,12 +265,14 @@ class EditSettings extends ExtendedController\PanelController
      */
     protected function loadPaymentMethodValues($viewName)
     {
-        $idempresa = AppSettings::get('default', 'idempresa');
+        $idempresa = $this->toolBox()->appSettings()->get('default', 'idempresa');
         $where = [new DataBaseWhere('idempresa', $idempresa)];
-        $methods = CodeModel::all('formaspago', 'codpago', 'descripcion', false, $where);
+        $methods = $this->codeModel->all('formaspago', 'codpago', 'descripcion', false, $where);
 
         $columnPayment = $this->views[$viewName]->columnForName('payment-method');
-        $columnPayment->widget->setValuesFromCodeModel($methods);
+        if ($columnPayment) {
+            $columnPayment->widget->setValuesFromCodeModel($methods);
+        }
     }
 
     /**
@@ -242,11 +281,13 @@ class EditSettings extends ExtendedController\PanelController
      */
     protected function loadWarehouseValues($viewName)
     {
-        $idempresa = AppSettings::get('default', 'idempresa');
+        $idempresa = $this->toolBox()->appSettings()->get('default', 'idempresa');
         $where = [new DataBaseWhere('idempresa', $idempresa)];
-        $almacenes = CodeModel::all('almacenes', 'codalmacen', 'nombre', false, $where);
+        $almacenes = $this->codeModel->all('almacenes', 'codalmacen', 'nombre', false, $where);
 
         $columnWarehouse = $this->views[$viewName]->columnForName('warehouse');
-        $columnWarehouse->widget->setValuesFromCodeModel($almacenes);
+        if ($columnWarehouse) {
+            $columnWarehouse->widget->setValuesFromCodeModel($almacenes);
+        }
     }
 }

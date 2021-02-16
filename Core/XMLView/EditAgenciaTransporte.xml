@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -16,33 +16,29 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
- *
- * Initial description for the controller EditAgenciaTransporte
- *
  * @author Artex Trading sa     <jcuello@artextrading.com>
  * @author Carlos García Gómez  <carlos@facturascripts.com>
 -->
 <view>
     <columns>
         <group name="data" numcolumns="12">
-            <column name="code" numcolumns="3" order="100">
-                <widget type="text" fieldname="codtrans" icon="fas fa-hashtag" maxlength="8" required="true" />
+            <column name="code" description="optional" display="none" numcolumns="2" order="100">
+                <widget type="text" fieldname="codtrans" icon="fas fa-hashtag" maxlength="8" readonly="dinamic" />
             </column>
-            <column name="name" numcolumns="3" order="110">
-                <widget type="text" fieldname="nombre" required="true" />
+            <column name="name" order="110">
+                <widget type="text" fieldname="nombre" maxlength="100" required="true" />
             </column>
-            <column name="phone" numcolumns="3" order="120">
-                <widget type="text" fieldname="telefono" icon="fas fa-phone" />
+            <column name="phone" order="120">
+                <widget type="text" fieldname="telefono" maxlength="30" icon="fas fa-phone" />
             </column>
-            <column name="url" numcolumns="3" order="130">
-                <widget type="link" fieldname="web" icon="fas fa-globe-americas" />
+            <column name="url" order="130">
+                <widget type="link" fieldname="web" maxlength="100" />
             </column>
         </group>
         <group name="data2" numcolumns="12">
-            <column name="active" numcolumns="2" order="100">
+            <column name="active" order="100">
                 <widget type="checkbox" fieldname="activo" />
             </column>
         </group>
     </columns>
 </view>
-

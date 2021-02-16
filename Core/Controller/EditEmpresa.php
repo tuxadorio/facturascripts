@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,7 +19,8 @@
 namespace FacturaScripts\Core\Controller;
 
 use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
-use FacturaScripts\Core\Lib\ExtendedController;
+use FacturaScripts\Core\Lib\ExtendedController\BaseView;
+use FacturaScripts\Core\Lib\ExtendedController\EditController;
 use FacturaScripts\Dinamic\Lib\RegimenIVA;
 
 /**
@@ -28,7 +29,7 @@ use FacturaScripts\Dinamic\Lib\RegimenIVA;
  * @author Carlos García Gómez  <carlos@facturascripts.com>
  * @author Artex Trading sa     <jcuello@artextrading.com>
  */
-class EditEmpresa extends ExtendedController\EditController
+class EditEmpresa extends EditController
 {
 
     /**
@@ -48,13 +49,11 @@ class EditEmpresa extends ExtendedController\EditController
      */
     public function getPageData()
     {
-        $pagedata = parent::getPageData();
-        $pagedata['title'] = 'company';
-        $pagedata['menu'] = 'admin';
-        $pagedata['icon'] = 'fas fa-building';
-        $pagedata['showonmenu'] = false;
-
-        return $pagedata;
+        $data = parent::getPageData();
+        $data['menu'] = 'admin';
+        $data['title'] = 'company';
+        $data['icon'] = 'fas fa-building';
+        return $data;
     }
 
     /**
@@ -73,9 +72,9 @@ class EditEmpresa extends ExtendedController\EditController
      * 
      * @param string $viewName
      */
-    private function createViewBankAccounts($viewName = 'EditCuentaBanco')
+    protected function createViewBankAccounts(string $viewName = 'ListCuentaBanco')
     {
-        $this->addEditListView($viewName, 'CuentaBanco', 'bank-accounts', 'fas fa-piggy-bank');
+        $this->addListView($viewName, 'CuentaBanco', 'bank-accounts', 'fas fa-piggy-bank');
         $this->views[$viewName]->disableColumn('company');
     }
 
@@ -83,7 +82,7 @@ class EditEmpresa extends ExtendedController\EditController
      * 
      * @param string $viewName
      */
-    private function createViewExercises($viewName = 'ListEjercicio')
+    protected function createViewExercises(string $viewName = 'ListEjercicio')
     {
         $this->addListView($viewName, 'Ejercicio', 'exercises', 'fas fa-calendar-alt');
         $this->views[$viewName]->disableColumn('company');
@@ -93,9 +92,9 @@ class EditEmpresa extends ExtendedController\EditController
      * 
      * @param string $viewName
      */
-    private function createViewPaymentMethods($viewName = 'EditFormaPago')
+    protected function createViewPaymentMethods(string $viewName = 'ListFormaPago')
     {
-        $this->addEditListView($viewName, 'FormaPago', 'payment-method', 'fas fa-credit-card');
+        $this->addListView($viewName, 'FormaPago', 'payment-method', 'fas fa-credit-card');
         $this->views[$viewName]->disableColumn('company');
     }
 
@@ -103,41 +102,60 @@ class EditEmpresa extends ExtendedController\EditController
      * 
      * @param string $viewName
      */
-    private function createViewWarehouse($viewName = 'EditAlmacen')
+    protected function createViewWarehouse(string $viewName = 'EditAlmacen')
     {
-        $this->addEditListView($viewName, 'Almacen', 'warehouses', 'fas fa-building');
+        $this->addListView($viewName, 'Almacen', 'warehouses', 'fas fa-warehouse');
         $this->views[$viewName]->disableColumn('company');
     }
 
     /**
      * Load view data procedure
      *
-     * @param string                      $viewName
-     * @param ExtendedController\EditView $view
+     * @param string   $viewName
+     * @param BaseView $view
      */
     protected function loadData($viewName, $view)
     {
+        $mvn = $this->getMainViewName();
+
         switch ($viewName) {
             case 'EditAlmacen':
-            case 'EditCuentaBanco':
-            case 'EditFormaPago':
+            case 'ListCuentaBanco':
             case 'ListEjercicio':
-                $idcompany = $this->getViewModelValue('EditEmpresa', 'idempresa');
+            case 'ListFormaPago':
+                $idcompany = $this->getViewModelValue($this->getMainViewName(), 'idempresa');
                 $where = [new DataBaseWhere('idempresa', $idcompany)];
                 $view->loadData('', $where);
                 break;
 
+            case $mvn:
+                parent::loadData($viewName, $view);
+                $this->setCustomWidgetValues($view);
+                break;
+
             default:
                 parent::loadData($viewName, $view);
-                $this->setCustomWidgetValues();
                 break;
         }
     }
 
-    protected function setCustomWidgetValues()
+    /**
+     * 
+     * @param BaseView $view
+     */
+    protected function setCustomWidgetValues(&$view)
     {
-        /// Load values option to VAT Type select input
-        $columnVATType = $this->views['EditEmpresa']->columnForName('vat-regime');
-        $columnVATType->widget->setValuesFromArrayKeys(RegimenIVA::all());
+        $columnVATType = $view->columnForName('vat-regime');
+        if ($columnVATType) {
+            $columnVATType->widget->setValuesFromArrayKeys(RegimenIVA::all());
+        }
+
+        $columnLogo = $view->columnForName('logo');
+        if ($columnLogo) {
+            $images = $this->codeModel->all('attached_files', 'idfile', 'filename', true, [
+                new DataBaseWhere('mimetype', 'image/gif,image/jpeg,image/png', 'IN')
+            ]);
+            $columnLogo->widget->setValuesFromCodeModel($images);
+        }
     }
 }

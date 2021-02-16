@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -20,27 +20,16 @@ namespace FacturaScripts\Core\Base;
 
 use FacturaScripts\Core\App\AppSettings;
 use FacturaScripts\Core\Base\MiniLog;
-use FacturaScripts\Core\Model\LogMessage;
+use FacturaScripts\Dinamic\Model\LogMessage;
 
 /**
- * Class to read the miniLog
+ * Class to read the miniLog.
  *
- * @package FacturaScripts\Core\Base
- *
- * @author Carlos García Gómez <carlos@facturascripts.com>
- * @author Cristo M. Estévez Hernández <cristom.estevez@gmail.com>
+ * @author Carlos García Gómez          <carlos@facturascripts.com>
+ * @author Cristo M. Estévez Hernández  <cristom.estevez@gmail.com>
  */
 class MiniLogSave
 {
-
-    /**
-     * Type of logs 
-     *
-     * @var array
-     */
-    const TYPES_LOG = ['info', 'notice', 'warning', 'error',
-        'critical', 'alert', 'emergency'
-    ];
 
     /**
      * Read the data from MiniLog and storage in Log table.
@@ -52,11 +41,12 @@ class MiniLogSave
     public function __construct(string $ip = '', string $nick = '', string $uri = '')
     {
         $miniLog = new MiniLog();
-        foreach ($miniLog->read($this->getActiveSettingsLog()) as $value) {
+        foreach ($miniLog->readAll($this->getActiveSettingsLog()) as $value) {
             $logMessage = new LogMessage();
-            $logMessage->time = date('d-m-Y H:i:s', $value["time"]);
-            $logMessage->level = $value["level"];
-            $logMessage->message = $value["message"];
+            $logMessage->channel = $value['channel'];
+            $logMessage->time = date('d-m-Y H:i:s', $value['time']);
+            $logMessage->level = $value['level'];
+            $logMessage->message = $value['message'];
             $logMessage->ip = empty($ip) ? null : $ip;
             $logMessage->nick = empty($nick) ? null : $nick;
             $logMessage->uri = empty($uri) ? null : $uri;
@@ -72,7 +62,7 @@ class MiniLogSave
     private function getActiveSettingsLog(): array
     {
         $types = [];
-        foreach (self::TYPES_LOG as $value) {
+        foreach (MiniLog::ALL_LEVELS as $value) {
             if (AppSettings::get('log', $value, 'false') == 'true') {
                 $types[] = $value;
             }

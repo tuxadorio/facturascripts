@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -27,11 +27,11 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * AppAPI is the class used for API.
  *
- * @author Carlos García Gómez                                  <carlos@facturascripts.com>
- * @author Ángel Guzmán Maeso                                   <angel@guzmanmaeso.com>
- * @author Rafael San José Tovar (http://www.x-netdigital.com)  <info@rsanjoseo.com>
+ * @author Carlos García Gómez      <carlos@facturascripts.com>
+ * @author Ángel Guzmán Maeso       <angel@guzmanmaeso.com>
+ * @author Rafael San José Tovar    <info@rsanjoseo.com>
  */
-class AppAPI extends App
+final class AppAPI extends App
 {
 
     const API_VERSION = 3;
@@ -44,47 +44,39 @@ class AppAPI extends App
     protected $apiKey;
 
     /**
+     * Returns the data into the standard output.
+     */
+    public function render()
+    {
+        $this->response->headers->set('Access-Control-Allow-Origin', '*');
+        $this->response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        $this->response->headers->set('Content-Type', 'application/json');
+        parent::render();
+    }
+
+    /**
      * Runs the API.
      *
      * @return bool
      */
     public function run(): bool
     {
-        $this->response->headers->set('Access-Control-Allow-Origin', '*');
-        $this->response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
-        $this->response->headers->set('Content-Type', 'application/json');
-
-        if ($this->request->server->get('REQUEST_METHOD') == "OPTIONS") {
-            if (!is_null($this->request->server->get('HTTP_ACCESS_CONTROL_REQUEST_HEADERS'))) {
-                $allowHeaders = $this->request->server->get('HTTP_ACCESS_CONTROL_REQUEST_HEADERS');
-                $this->response->headers->set('Access-Control-Allow-Headers', $allowHeaders);
-            }
-
-            return true;
-        }
-
-        if ($this->isDisabled()) {
-            $this->fatalError('API-DISABLED', Response::HTTP_NOT_FOUND);
+        if (false === parent::run()) {
             return false;
-        }
-
-        if (!$this->dataBase->connected()) {
-            $this->fatalError('DB-ERROR', Response::HTTP_INTERNAL_SERVER_ERROR);
+        } elseif ($this->isDisabled()) {
+            $this->die(Response::HTTP_NOT_FOUND, 'api-disabled');
             return false;
-        }
-
-        if ($this->isIPBanned()) {
-            $this->fatalError('IP-BANNED', Response::HTTP_FORBIDDEN);
+        } elseif ($this->request->server->get('REQUEST_METHOD') == 'OPTIONS') {
+            $allowHeaders = $this->request->server->get('HTTP_ACCESS_CONTROL_REQUEST_HEADERS');
+            $this->response->headers->set('Access-Control-Allow-Headers', $allowHeaders);
             return false;
-        }
-
-        if (!$this->checkAuthToken()) {
-            $this->fatalError('AUTH-TOKEN-INVALID', Response::HTTP_FORBIDDEN);
+        } elseif (false === $this->checkAuthToken()) {
+            $this->ipWarning();
+            $this->die(Response::HTTP_FORBIDDEN, 'auth-token-invalid');
             return false;
-        }
-
-        if (!$this->isAllowed()) {
-            $this->fatalError('FORBIDDEN', Response::HTTP_FORBIDDEN);
+        } elseif (false === $this->isAllowed()) {
+            $this->ipWarning();
+            $this->die(Response::HTTP_FORBIDDEN, 'forbidden');
             return false;
         }
 
@@ -96,6 +88,9 @@ class AppAPI extends App
      * In the header you have to pass a token using the header 'Token' or the
      * standard 'X-Auth-Token', returning true if the token passed by any of
      * those headers is valid.
+     * 
+     * We can define a master API KEY in the config.php by defining the constant
+     * FS_API_KEY.
      *
      * @return bool
      */
@@ -108,11 +103,33 @@ class AppAPI extends App
             return false;
         }
 
+        if (defined('FS_API_KEY') && $token == \FS_API_KEY) {
+            $this->apiKey->apikey = \FS_API_KEY;
+            $this->apiKey->fullaccess = true;
+            return true;
+        }
+
         $where = [
             new DataBaseWhere('apikey', $token),
             new DataBaseWhere('enabled', true)
         ];
         return $this->apiKey->loadFromCode('', $where);
+    }
+
+    /**
+     * 
+     * @param int    $status
+     * @param string $message
+     */
+    protected function die(int $status, string $message = '')
+    {
+        $content = $this->toolBox()->i18n()->trans($message);
+        foreach ($this->toolBox()->log()->readAll() as $log) {
+            $content .= empty($content) ? $log["message"] : "\n" . $log["message"];
+        }
+
+        $this->response->setContent(json_encode(['error' => $content]));
+        $this->response->setStatusCode($status);
     }
 
     /**
@@ -131,18 +148,6 @@ class AppAPI extends App
     }
 
     /**
-     * Return an array with the error message, and the corresponding status.
-     *
-     * @param string $text
-     * @param int    $status
-     */
-    private function fatalError(string $text, int $status)
-    {
-        $this->response->setContent(json_encode(['error' => $text]));
-        $this->response->setStatusCode($status);
-    }
-
-    /**
      * Go through all the files in the /Dinamic/Lib/API, collecting the name of
      * all available resources in each of them, and adding them to an array that
      * is returned.
@@ -153,15 +158,15 @@ class AppAPI extends App
     {
         $resources = [[]];
         // Loop all controllers in /Dinamic/Lib/API
-        foreach (scandir(FS_FOLDER . DIRECTORY_SEPARATOR . 'Dinamic' . DIRECTORY_SEPARATOR . 'Lib' . DIRECTORY_SEPARATOR . 'API', SCANDIR_SORT_NONE) as $resource) {
+        foreach (scandir(\FS_FOLDER . DIRECTORY_SEPARATOR . 'Dinamic' . DIRECTORY_SEPARATOR . 'Lib' . DIRECTORY_SEPARATOR . 'API', SCANDIR_SORT_NONE) as $resource) {
             if (substr($resource, -4) !== '.php') {
                 continue;
             }
 
             // The name of the class will be the same as that of the file without the php extension.
             // Classes will be descendants of Base/APIResourceClass.
-            $class = substr('FacturaScripts\\Dinamic\\Lib\\API\\' . $resource, 0, -4);
-            $APIClass = new $class($this->response, $this->request, $this->miniLog, $this->i18n, []);
+            $class = substr('\\FacturaScripts\\Dinamic\\Lib\\API\\' . $resource, 0, -4);
+            $APIClass = new $class($this->response, $this->request, []);
             if (isset($APIClass) && method_exists($APIClass, 'getResources')) {
                 // getResources obtains an associative array of arrays generated
                 // with setResource ('name'). These arrays keep the name of the class
@@ -187,7 +192,7 @@ class AppAPI extends App
     private function isAllowed(): bool
     {
         $resource = $this->getUriParam(2);
-        if ($resource === '') {
+        if ($resource === '' || $this->apiKey->fullaccess) {
             return true;
         }
 
@@ -196,36 +201,40 @@ class AppAPI extends App
             new DataBaseWhere('idapikey', $this->apiKey->id),
             new DataBaseWhere('resource', $resource)
         ];
-        if (!$apiAccess->loadFromCode('', $where)) {
-            return false;
-        }
+        if ($apiAccess->loadFromCode('', $where)) {
+            switch ($this->request->getMethod()) {
+                case 'DELETE':
+                    return $apiAccess->allowdelete;
 
-        switch ($this->request->getMethod()) {
-            case 'DELETE':
-                return $apiAccess->allowdelete;
+                case 'GET':
+                    return $apiAccess->allowget;
 
-            case 'GET':
-                return $apiAccess->allowget;
+                case 'PATCH':
+                case 'PUT':
+                    return $apiAccess->allowput;
 
-            case 'PATCH':
-            case 'PUT':
-                return $apiAccess->allowput;
-
-            case 'POST':
-                return $apiAccess->allowpost;
+                case 'POST':
+                    return $apiAccess->allowpost;
+            }
         }
 
         return false;
     }
 
     /**
-     * Check if API is disabled
+     * Check if API is disabled. API can't be disabled if FS_API_KEY is defined
+     * in the config.php file.
      *
      * @return bool
      */
     private function isDisabled(): bool
     {
-        return $this->settings->get('default', 'enable_api', false) == false;
+        /// Is FS_API_KEY defined in the config?
+        if (defined('FS_API_KEY')) {
+            return false;
+        }
+
+        return $this->toolBox()->appSettings()->get('default', 'enable_api', false) == false;
     }
 
     /**
@@ -245,7 +254,7 @@ class AppAPI extends App
         }
 
         if (!isset($map[$resourceName]['API'])) {
-            $this->fatalError('invalid-resource', Response::HTTP_BAD_REQUEST);
+            $this->die(Response::HTTP_BAD_REQUEST, 'invalid-resource');
             return false;
         }
 
@@ -258,10 +267,11 @@ class AppAPI extends App
         }
 
         try {
-            $APIClass = new $map[$resourceName]['API']($this->response, $this->request, $this->miniLog, $this->i18n, $params);
+            $APIClass = new $map[$resourceName]['API']($this->response, $this->request, $params);
             return $APIClass->processResource($map[$resourceName]['Name']);
         } catch (Exception $exc) {
-            $this->fatalError('API-ERROR: ' . $exc->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
+            $this->toolBox()->log()->critical('API-ERROR: ' . $exc->getMessage());
+            $this->die(Response::HTTP_INTERNAL_SERVER_ERROR);
         }
 
         return false;
@@ -278,7 +288,7 @@ class AppAPI extends App
             return $this->selectResource();
         }
 
-        $this->fatalError('API-VERSION-NOT-FOUND', Response::HTTP_NOT_FOUND);
+        $this->die(Response::HTTP_NOT_FOUND, 'api-version-not-found');
         return true;
     }
 }

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018  Carlos Garcia Gomez  <carlos@facturascripts.com>
+ * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -17,8 +17,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 namespace FacturaScripts\Core\Model;
-
-use FacturaScripts\Core\Base\Utils;
 
 /**
  * ApiKey model to manage the connection tokens through the api
@@ -61,6 +59,12 @@ class ApiKey extends Base\ModelClass
     public $enabled;
 
     /**
+     *
+     * @var bool
+     */
+    public $fullaccess;
+
+    /**
      * Primary key. Id autoincremental
      *
      * @var int
@@ -80,9 +84,10 @@ class ApiKey extends Base\ModelClass
     public function clear()
     {
         parent::clear();
-        $this->apikey = Utils::randomString(20);
+        $this->apikey = $this->toolBox()->utils()->randomString(20);
+        $this->creationdate = \date(self::DATE_STYLE);
         $this->enabled = true;
-        $this->creationdate = date('d-m-Y');
+        $this->fullaccess = false;
     }
 
     /**
@@ -93,6 +98,15 @@ class ApiKey extends Base\ModelClass
     public static function primaryColumn()
     {
         return 'id';
+    }
+
+    /**
+     * 
+     * @return string
+     */
+    public function primaryDescriptionColumn()
+    {
+        return 'description';
     }
 
     /**

@@ -1,8 +1,15 @@
 {
     "default": {
         "coddivisa": "UYU",
+        "codimpuesto": "IVA22",
         "codserie": "A",
         "codpago": "CONT",
-        "codimpuesto": "IVA22"
+        "tipoidfiscal": "RUT"
+    },
+    "email": {
+        "enc": "ssl",
+        "host": "smtp.gmail.com",
+        "mailer": "smtp",
+        "port": "465"
     }
 }

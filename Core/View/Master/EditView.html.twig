@@ -1,4 +1,22 @@
-{% import _self as macros %}
+{#
+    /**
+     * This file is part of FacturaScripts
+     * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
+     *
+     * This program is free software: you can redistribute it and/or modify
+     * it under the terms of the GNU Lesser General Public License as
+     * published by the Free Software Foundation, either version 3 of the
+     * License, or (at your option) any later version.
+     *
+     * This program is distributed in the hope that it will be useful,
+     * but WITHOUT ANY WARRANTY; without even the implied warranty of
+     * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+     * GNU Lesser General Public License for more details.
+     *
+     * You should have received a copy of the GNU Lesser General Public License
+     * along with this program. If not, see http://www.gnu.org/licenses/.
+     */
+#}
 {% set currentView = fsc.getCurrentView() %}
 {% set action = currentView.model.exists() ? 'edit' : 'insert' %}
 
@@ -39,8 +57,9 @@
     <input type="hidden" name="action" value="{{ action }}"/>
     <input type="hidden" name="activetab" value="{{ currentView.getViewName() }}"/>
     <input type="hidden" name="code" value="{{ currentView.model.primaryColumnValue() }}"/>
-    <div class="card">
-        <div class="card-body">
+    <input type="hidden" name="multireqtoken" value="{{ fsc.multiRequestProtection.newToken() }}"/>
+    <div class="{{ currentView.settings.card ? 'card shadow' : '' }}">
+        <div class="{{ currentView.settings.card ? 'card-body' : 'container-fluid' }}">
             <div class="row">
                 <div class="col-12 text-right">
                     {# -- Row statistics -- #}
@@ -48,7 +67,7 @@
                     {{ row.render(fsc) | raw }}
                 </div>
             </div>
-            <div class="row">
+            <div class="form-row">
                 {% for group in currentView.getColumns() %}
                     {{ group.edit(currentView.model) | raw }}
                 {% endfor %}
@@ -62,10 +81,11 @@
                         </button>
                     </div>
                 {% endif %}
-                <div class="col">
+                {% set extraClass = fsc.hasData and currentView.settings.btnDelete ? 'text-center' : '' %}
+                <div class="col {{ extraClass }}">
                     {# -- Row actions -- #}
                     {% set row = currentView.getRow('actions') %}
-                    {{ row.render() | raw }}
+                    {{ row.render(false, currentView.getViewName()) | raw }}
                 </div>
                 <div class="col text-right">
                     {% if currentView.settings.btnUndo %}

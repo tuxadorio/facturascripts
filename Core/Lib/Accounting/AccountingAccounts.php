@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -23,8 +23,11 @@ use FacturaScripts\Dinamic\Model\Cliente;
 use FacturaScripts\Dinamic\Model\Cuenta;
 use FacturaScripts\Dinamic\Model\CuentaBanco;
 use FacturaScripts\Dinamic\Model\Ejercicio;
+use FacturaScripts\Dinamic\Model\FormaPago;
 use FacturaScripts\Dinamic\Model\GrupoClientes;
+use FacturaScripts\Dinamic\Model\Impuesto;
 use FacturaScripts\Dinamic\Model\Proveedor;
+use FacturaScripts\Dinamic\Model\Retencion;
 use FacturaScripts\Dinamic\Model\Subcuenta;
 
 /**
@@ -34,6 +37,7 @@ use FacturaScripts\Dinamic\Model\Subcuenta;
  *   - Customer
  *   - Customer Group
  *   - Supplier
+ *   - Payment
  *
  * @author Artex Trading sa     <jcuello@artextrading.com>
  * @author Carlos García Gómez  <carlos@facturascripts.com>
@@ -42,9 +46,23 @@ class AccountingAccounts
 {
 
     const SPECIAL_CUSTOMER_ACCOUNT = 'CLIENT';
+    const SPECIAL_CREDITOR_ACCOUNT = 'ACREED';
     const SPECIAL_EXPENSE_ACCOUNT = 'GTOBAN';
     const SPECIAL_PAYMENT_ACCOUNT = 'CAJA';
     const SPECIAL_SUPPLIER_ACCOUNT = 'PROVEE';
+    const SPECIAL_TAX_IMPACTED_ACCOUNT = 'IVAREP';
+    const SPECIAL_TAX_SUPPORTED_ACCOUNT = 'IVASOP';
+    const SPECIAL_IRPF_SALES_ACCOUNT = 'IRPF';
+    const SPECIAL_IRPF_PURCHASE_ACCOUNT = 'IRPFPR';
+    const SPECIAL_PROFIT_LOSS_ACCOUNT = 'PYG';
+    const SPECIAL_POSITIVE_PREV_ACCOUNT = 'PREVIO';
+    const SPECIAL_NEGATIVE_PREV_ACCOUNT = 'PRENEG';
+
+    /**
+     *
+     * @var AccountingCreation
+     */
+    protected $creation;
 
     /**
      *
@@ -54,11 +72,10 @@ class AccountingAccounts
 
     /**
      * Class constructor
-     *
-     * @param string $exercise
      */
     public function __construct()
     {
+        $this->creation = new AccountingCreation();
         $this->exercise = new Ejercicio();
     }
 
@@ -84,8 +101,11 @@ class AccountingAccounts
                 return $subaccount;
             }
 
+            /// search parent account
+            $account = $this->getSpecialAccount($specialAccount);
+
             /// create sub-account
-            return $this->createCustomerAccount($customer, $specialAccount);
+            return $this->creation->createSubjectAccount($customer, $account);
         }
 
         /// group has sub-account?
@@ -97,14 +117,9 @@ class AccountingAccounts
             }
         }
 
-        /// assign a new sub-account code
+        /// create and assign a new sub-account code
         $account = $this->getSpecialAccount($specialAccount);
-        if ($account->exists()) {
-            $customer->codsubcuenta = $this->getFreeCustomerSubaccount($customer, $account);
-            return $this->createCustomerAccount($customer, $specialAccount);
-        }
-
-        return new Subcuenta();
+        return $this->creation->createSubjectAccount($customer, $account);
     }
 
     /**
@@ -117,30 +132,20 @@ class AccountingAccounts
      */
     public function getCustomerGroupAccount($group, string $specialAccount = self::SPECIAL_CUSTOMER_ACCOUNT)
     {
-        if (!empty($group->codsubcuenta)) {
-            $subaccount = $this->getSubAccount($group->codsubcuenta);
-            if ($subaccount->exists()) {
-                return $subaccount;
-            }
-
-            $account = $this->getSpecialAccount($specialAccount);
-            if (!$account->exists() || !$this->exercise->isOpened()) {
-                return new Subcuenta();
-            }
-
-            /// create in this exercise
-            $newSubaccount = new Subcuenta();
-            $newSubaccount->codcuenta = $account->codcuenta;
-            $newSubaccount->codejercicio = $account->codejercicio;
-            $newSubaccount->codsubcuenta = $group->codsubcuenta;
-            $newSubaccount->descripcion = $group->nombre;
-            $newSubaccount->idcuenta = $account->idcuenta;
-            $newSubaccount->save();
-
-            return $newSubaccount;
+        if (empty($group->codsubcuenta)) {
+            return new Subcuenta();
         }
 
-        return new Subcuenta();
+        $subaccount = $this->getSubAccount($group->codsubcuenta);
+        if ($subaccount->exists()) {
+            return $subaccount;
+        }
+
+        /// search parent account
+        $account = $this->getSpecialAccount($specialAccount);
+
+        /// create in this exercise
+        return $this->creation->createFromAccount($account, $group->codsubcuenta, $group->nombre);
     }
 
     /**
@@ -162,68 +167,49 @@ class AccountingAccounts
     }
 
     /**
-     * 
-     * @param Cliente $customer
-     * @param Cuenta  $account
+     * Get the accounting sub-account for Purchase Retention.
      *
-     * @return string
+     * @param Retencion $retention
+     * @param string    $specialAccount
+     *
+     * @return Subcuenta
      */
-    public function getFreeCustomerSubaccount($customer, $account)
+    public function getIRPFPurchaseAccount($retention, string $specialAccount = self::SPECIAL_IRPF_PURCHASE_ACCOUNT)
     {
-        $numbers = array_merge([$customer->primaryColumnValue()], range(1, 999));
-        foreach ($numbers as $num) {
-            $newCode = $this->fillToLength($this->exercise->longsubcuenta, $num, $account->codcuenta);
-
-            /// is this code used in other customer?
-            $where = [new DataBaseWhere('codsubcuenta', $newCode)];
-            $count = $customer->count($where);
-
-            if (!empty($newCode) && !$this->getSubAccount($newCode)->exists() && $count == 0) {
-                return $newCode;
-            }
-        }
-
-        return '';
+        return $this->getAccountFromCode($retention->codsubcuentaacr, $specialAccount);
     }
 
     /**
-     * 
-     * @param Proveedor $supplier
-     * @param Cuenta    $account
+     * Get the accounting sub-account for Sales Retention.
      *
-     * @return string
+     * @param Retencion $retention
+     * @param string    $specialAccount
+     *
+     * @return Subcuenta
      */
-    public function getFreeSupplierSubaccount($supplier, $account)
+    public function getIRPFSalesAccount($retention, string $specialAccount = self::SPECIAL_IRPF_SALES_ACCOUNT)
     {
-        $numbers = array_merge([$supplier->primaryColumnValue()], range(1, 999));
-        foreach ($numbers as $num) {
-            $newCode = $this->fillToLength($this->exercise->longsubcuenta, $num, $account->codcuenta);
-
-            /// is this code used in other supplier?
-            $where = [new DataBaseWhere('codsubcuenta', $newCode)];
-            $count = $supplier->count($where);
-
-            if (!empty($newCode) && !$this->getSubAccount($newCode)->exists() && $count == 0) {
-                return $newCode;
-            }
-        }
-
-        return '';
+        return $this->getAccountFromCode($retention->codsubcuentaret, $specialAccount);
     }
 
     /**
-     * Get the accounting sub-account for payments in the fiscal year.
+     * Get the accounting sub-account for the payment method in the fiscal year.
      *
-     * @param string $code
+     * @param string $codpago
      * @param string $specialAccount
      *
      * @return Subcuenta
      */
-    public function getPaymentAccount(string $code, string $specialAccount = self::SPECIAL_PAYMENT_ACCOUNT)
+    public function getPaymentAccount(string $codpago, string $specialAccount = self::SPECIAL_PAYMENT_ACCOUNT)
     {
         $bankAccount = new CuentaBanco();
-        if ($bankAccount->loadFromCode($code) && !empty($bankAccount->codsubcuenta)) {
-            return $this->getSubAccount($bankAccount->codsubcuenta);
+        $paymentMethod = new FormaPago();
+        if ($paymentMethod->loadFromCode($codpago) &&
+            $paymentMethod->codcuentabanco &&
+            $bankAccount->loadFromCode($paymentMethod->codcuentabanco) &&
+            !empty($bankAccount->codsubcuenta)) {
+            $subaccount = $this->getSubAccount($bankAccount->codsubcuenta);
+            return $subaccount->exists() ? $subaccount : $this->getSpecialSubAccount($specialAccount);
         }
 
         return $this->getSpecialSubAccount($specialAccount);
@@ -309,6 +295,10 @@ class AccountingAccounts
      */
     public function getSupplierAccount($supplier, string $specialAccount = self::SPECIAL_SUPPLIER_ACCOUNT)
     {
+        if ($supplier->acreedor) {
+            $specialAccount = self::SPECIAL_CREDITOR_ACCOUNT;
+        }
+
         /// defined sub-account code?
         if (!empty($supplier->codsubcuenta)) {
             $subaccount = $this->getSubAccount($supplier->codsubcuenta);
@@ -316,92 +306,80 @@ class AccountingAccounts
                 return $subaccount;
             }
 
+            /// search parent account
+            $account = $this->getSpecialAccount($specialAccount);
+
             /// create sub-account
-            return $this->createSupplierAccount($supplier, $specialAccount);
+            return $this->creation->createSubjectAccount($supplier, $account);
         }
 
         /// assign a new sub-account code
         $account = $this->getSpecialAccount($specialAccount);
-        if ($account->exists()) {
-            $supplier->codsubcuenta = $this->getFreeSupplierSubaccount($supplier, $account);
-            return $this->createSupplierAccount($supplier, $specialAccount);
-        }
-
-        return new Subcuenta();
+        return $this->creation->createSubjectAccount($supplier, $account);
     }
 
     /**
+     * Get the accounting sub-account for Impacted Tax.
      *
-     * @param Cliente $customer
-     * @param string  $specialAccount
+     * @param Impuesto $tax
+     * @param string   $specialAccount
      *
      * @return Subcuenta
      */
-    protected function createCustomerAccount(&$customer, string $specialAccount = self::SPECIAL_CUSTOMER_ACCOUNT)
+    public function getTaxImpactedAccount($tax, string $specialAccount = self::SPECIAL_TAX_IMPACTED_ACCOUNT)
     {
-        $subcuenta = new Subcuenta();
-        $cuenta = $this->getSpecialAccount($specialAccount);
-        if (!$cuenta->exists() || !$this->exercise->isOpened()) {
-            return $subcuenta;
-        }
-
-        $subcuenta->codcuenta = $cuenta->codcuenta;
-        $subcuenta->codejercicio = $cuenta->codejercicio;
-        $subcuenta->codsubcuenta = $customer->codsubcuenta;
-        $subcuenta->descripcion = $customer->razonsocial;
-        $subcuenta->idcuenta = $cuenta->idcuenta;
-        if ($subcuenta->save()) {
-            $customer->save();
-        }
-
-        return $subcuenta;
+        return $this->getAccountFromCode($tax->codsubcuentarep, $specialAccount);
     }
 
     /**
+     * Get the accounting sub-account for Supported Tax.
      *
-     * @param Proveedor $supplier
-     * @param string    $specialAccount
+     * @param Impuesto $tax
+     * @param string   $specialAccount
      *
      * @return Subcuenta
      */
-    protected function createSupplierAccount(&$supplier, string $specialAccount = self::SPECIAL_CUSTOMER_ACCOUNT)
+    public function getTaxSupportedAccount($tax, string $specialAccount = self::SPECIAL_TAX_SUPPORTED_ACCOUNT)
     {
-        $subcuenta = new Subcuenta();
-        $cuenta = $this->getSpecialAccount($specialAccount);
-        if (!$cuenta->exists() || !$this->exercise->isOpened()) {
-            return $subcuenta;
-        }
-
-        $subcuenta->codcuenta = $cuenta->codcuenta;
-        $subcuenta->codejercicio = $cuenta->codejercicio;
-        $subcuenta->codsubcuenta = $supplier->codsubcuenta;
-        $subcuenta->descripcion = $supplier->razonsocial;
-        $subcuenta->idcuenta = $cuenta->idcuenta;
-        if ($subcuenta->save()) {
-            $supplier->save();
-        }
-
-        return $subcuenta;
+        return $this->getAccountFromCode($tax->codsubcuentasop, $specialAccount);
     }
 
     /**
+     * Get the accounting sub-account according to the indicated code sub-account.
+     *   - First check the tax
+     *   - Second check the special account
      *
-     * @param int    $length
-     * @param string $value
-     * @param string $prefix
+     * @param string $code
+     * @param string $specialAccount
      *
-     * @return string
+     * @return Subcuenta
      */
-    protected function fillToLength(int $length, string $value, string $prefix = ''): string
+    private function getAccountFromCode($code, string $specialAccount)
     {
-        $value2 = trim($value);
-        $count = $length - strlen($prefix) - strlen($value2);
-        if ($count > 0) {
-            return $prefix . str_repeat('0', $count) . $value2;
-        } elseif ($count == 0) {
-            return $prefix . $value2;
+        /// defined sub-account code?
+        if (!empty($code)) {
+            $subaccount = $this->getSubAccount($code);
+            if ($subaccount->exists()) {
+                return $subaccount;
+            }
+
+            /// search parent account
+            $account = $this->getSpecialAccount($specialAccount);
+
+            /// create sub-account
+            return $this->creation->createFromAccount($account, $code);
         }
 
-        return '';
+        /// search special account in sub-accounts
+        $subaccount = $this->getSpecialSubAccount($specialAccount);
+        if ($subaccount->exists()) {
+            return $subaccount;
+        }
+
+        /// search special account in accounts and return the first sub-account
+        $account = $this->getSpecialAccount($specialAccount);
+        $firstSubaccount = new Subcuenta();
+        $firstSubaccount->loadFromCode('', [new DataBaseWhere('idcuenta', $account->idcuenta)], ['idsubcuenta' => 'ASC']);
+        return $firstSubaccount;
     }
 }

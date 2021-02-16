@@ -1,12 +1,7 @@
 {#
-   /**
-     * PanelController Template. (Top Panel)
-     *
-     * It shows the data of one or several models, through a navigation panel,
-     * in different formats.
-     *
+    /**
      * This file is part of FacturaScripts
-     * Copyright (C) 2017-2018 Carlos Garcia Gomez <carlos@facturascripts.com>
+     * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
      *
      * This program is free software: you can redistribute it and/or modify
      * it under the terms of the GNU Lesser General Public License as
@@ -20,17 +15,16 @@
      *
      * You should have received a copy of the GNU Lesser General Public License
      * along with this program. If not, see http://www.gnu.org/licenses/.
-     *
-    */
+     */
 #}
-
 {% extends "Master/PanelController.html.twig" %}
 
-{% block body %}
-    <div class="container-fluid">
+{% block bodyHeaderOptions %}
+    {{ parent() }}
+    <div class="container-fluid d-print-none">
         <div class="row">
-            <div class="col-12">
-                <ul class="nav nav-tabs mb-3 d-print-none" id="mainTabs" role="tablist">
+            <div class="col">
+                <ul class="nav nav-tabs" id="mainTabs" role="tablist">
                     {% for viewName, view in fsc.views %}
                         <li class="nav-item">
                             {% set active = (viewName == fsc.active) ? ' active' : '' %}
@@ -38,21 +32,36 @@
                             <a href="#{{ viewName }}" class="nav-link{{ active }}{{ disable }}" data-toggle="tab" role="tab" aria-controls="{{ viewName }}">
                                 <i class="{{ view.icon }}" aria-hidden="true"></i>
                                 <span class="d-none d-sm-inline-block">&nbsp;{{ view.title }}</span>
-                                {% if view.count > 0 %}<span class="badge badge-secondary">{{ fsc.numberTools.format(view.count, 0) }}</span>{% endif %}
+                                {% if view.count > 0 %}<span class="badge badge-secondary">{{ fsc.toolBox().numbers().format(view.count, 0) }}</span>{% endif %}
                             </a>
                         </li>
                     {% endfor %}
                 </ul>
-                <div class="tab-content" id="mainTabsContent">
-                    {% for viewName, view in fsc.views %}
-                        {% set active = (viewName == fsc.active) ? ' show active' : '' %}
-                        <div class="tab-pane{{ active }}" id="{{ viewName }}" role="tabpanel">
-                            {% do fsc.setCurrentView(viewName) %}
-                            {{ include(view.template) }}
-                        </div>
-                    {% endfor %}
-                </div>
             </div>
         </div>
     </div>
+{% endblock %}
+
+{% block body %}
+    <div class="tab-content pt-3" id="mainTabsContent">
+        {% for viewName, view in fsc.views %}
+            {% set active = (viewName == fsc.active) ? 'tab-pane show active' : 'tab-pane' %}
+            <div class="{{ active }}" id="{{ viewName }}" role="tabpanel">
+                {% do fsc.setCurrentView(viewName) %}
+                {{ include(view.template) }}
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}
+
+{% block css %}
+    {{ parent() }}
+    <style>
+        body {
+            background-color: transparent;
+        }
+        .bg-header {
+            background-color: #FAFBFC;
+        }
+    </style>
 {% endblock %}

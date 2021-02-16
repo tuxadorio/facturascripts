@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -19,7 +19,8 @@
 namespace FacturaScripts\Core\Lib\Accounting;
 
 use FacturaScripts\Core\Base\DataBase;
-use FacturaScripts\Core\Base\DivisaTools;
+use FacturaScripts\Core\Base\ToolBox;
+use FacturaScripts\Dinamic\Model\Ejercicio;
 
 /**
  * Description of AccountingBase
@@ -38,13 +39,6 @@ abstract class AccountingBase
     protected $dataBase;
 
     /**
-     * Tools to work with currencies.
-     *
-     * @var DivisaTools
-     */
-    protected $divisaTools;
-
-    /**
      * Start date.
      *
      * @var string
@@ -59,7 +53,14 @@ abstract class AccountingBase
     protected $dateTo;
 
     /**
-     * Generate the balance ammounts between two dates.
+     * Fiscal exercise
+     *
+     * @var Ejercicio
+     */
+    protected $exercise;
+
+    /**
+     * Generate the balance amounts between two dates.
      */
     abstract public function generate(string $dateFrom, string $dateTo, array $params = []);
 
@@ -74,7 +75,29 @@ abstract class AccountingBase
     public function __construct()
     {
         $this->dataBase = new DataBase();
-        $this->divisaTools = new DivisaTools();
+        $this->exercise = new Ejercicio();
+    }
+
+    /**
+     * Load exercise data for the specified code
+     *
+     * @param string $code
+     */
+    public function setExercise($code)
+    {
+        $this->exercise->loadFromCode($code);
+    }
+
+    /**
+     * Load exercise data for the company and date
+     *
+     * @param int    $idcompany
+     * @param string $date
+     */
+    public function setExerciseFromDate($idcompany, $date)
+    {
+        $this->exercise->idempresa = $idcompany;
+        $this->exercise->loadFromDate($date, false, false);
     }
 
     /**
@@ -87,6 +110,15 @@ abstract class AccountingBase
      */
     protected function addToDate($date, $add)
     {
-        return \date('d-m-Y', strtotime($add, strtotime($date)));
+        return \date('d-m-Y', \strtotime($add, \strtotime($date)));
+    }
+
+    /**
+     *
+     * @return ToolBox
+     */
+    protected function toolBox()
+    {
+        return new ToolBox();
     }
 }
