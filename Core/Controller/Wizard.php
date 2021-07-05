@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2018-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2018-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -44,7 +44,7 @@ class Wizard extends Controller
      * 
      * @return array
      */
-    public function getAvaliablePlugins()
+    public function getAvailablePlugins()
     {
         $pluginManager = new PluginManager();
         $installedPlugins = $pluginManager->installedPlugins();
@@ -306,6 +306,9 @@ class Wizard extends Controller
         $this->empresa->telefono1 = $this->request->request->get('telefono1', '');
         $this->empresa->telefono2 = $this->request->request->get('telefono2', '');
         $this->empresa->tipoidfiscal = $this->request->request->get('tipoidfiscal', '');
+        if (empty($this->empresa->tipoidfiscal)) {
+            $this->empresa->tipoidfiscal = $appSettings->get('default', 'tipoidfiscal');
+        }
         $this->empresa->save();
 
         /// assignes warehouse?
@@ -432,15 +435,15 @@ class Wizard extends Controller
             $finalValue = empty($value) ? null : $value;
             $appSettings->set('default', $key, $finalValue);
         }
-        $ventasinstock = (bool) $this->request->request->get('ventasinstock', '0');
-        $appSettings->set('default', 'ventasinstock', $ventasinstock);
+        $appSettings->set('default', 'updatesupplierprices', (bool) $this->request->request->get('updatesupplierprices', '0'));
+        $appSettings->set('default', 'ventasinstock', (bool) $this->request->request->get('ventasinstock', '0'));
         $appSettings->save();
 
         if ((bool) $this->request->request->get('defaultplan', '0')) {
             $this->loadDefaultAccountingPlan($this->empresa->codpais);
         }
 
-        if (empty($this->getAvaliablePlugins())) {
+        if (empty($this->getAvailablePlugins())) {
             $this->saveStep4();
         } else {
             /// change template

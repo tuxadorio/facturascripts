@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -255,6 +255,23 @@ abstract class BaseController extends Controller
     }
 
     /**
+     * Check if the active user has permission to view the information
+     * of the active record in the informed model.
+     * 
+     * @param object $model
+     *
+     * @return bool
+     */
+    protected function checkOwnerData($model): bool
+    {
+        if ($this->permissions->onlyOwnerData && isset($model->nick) && $model->nick !== $this->user->nick) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Action to delete data.
      *
      * @return bool
@@ -310,7 +327,13 @@ abstract class BaseController extends Controller
     protected function exportAction()
     {
         $this->setTemplate(false);
-        $this->exportManager->newDoc($this->request->get('option', ''), $this->title);
+        $this->exportManager->newDoc(
+            $this->request->get('option', ''),
+            $this->title,
+            (int) $this->request->request->get('idformat', ''),
+            $this->request->request->get('langcode', '')
+        );
+
         foreach ($this->views as $selectedView) {
             if (false === $selectedView->settings['active']) {
                 continue;
@@ -341,6 +364,19 @@ abstract class BaseController extends Controller
             }
         }
         return $result;
+    }
+
+    /**
+     * Returns the where filter to apply to obtain the data
+     * created by the active user.
+     *
+     * @param object $model
+     *
+     * @return DataBaseWhere[]
+     */
+    protected function getOwnerFilter($model)
+    {
+        return \property_exists($model, 'nick') ? [new DataBaseWhere('nick', $this->user->nick)] : [];
     }
 
     /**

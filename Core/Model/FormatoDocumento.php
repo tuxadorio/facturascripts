@@ -30,6 +30,12 @@ class FormatoDocumento extends Base\ModelClass
     use Base\ModelTrait;
 
     /**
+     * 
+     * @var bool
+     */
+    public $autoaplicar;
+
+    /**
      * Foreign key with series table
      *
      * @var string
@@ -82,6 +88,12 @@ class FormatoDocumento extends Base\ModelClass
      * @var string
      */
     public $titulo;
+
+    public function clear()
+    {
+        parent::clear();
+        $this->autoaplicar = false;
+    }
 
     /**
      * This function is called when creating the model table. Returns the SQL
@@ -144,7 +156,7 @@ class FormatoDocumento extends Base\ModelClass
      *
      * @return string
      */
-    public function url(string $type = 'auto', string $list = 'ListSecuenciaDocumento?activetab=List')
+    public function url(string $type = 'auto', string $list = 'EditSettings?activetab=List'): string
     {
         return parent::url($type, $list);
     }

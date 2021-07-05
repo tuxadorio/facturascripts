@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -67,7 +67,7 @@ abstract class ExportBase
     /**
      * Blank document.
      */
-    abstract public function newDoc(string $title);
+    abstract public function newDoc(string $title, int $idformat, string $langcode);
 
     /**
      * Sets default orientation.
@@ -221,7 +221,10 @@ abstract class ExportBase
     protected function getDocumentFormat($model)
     {
         $documentFormat = new FormatoDocumento();
-        $where = [new DataBaseWhere('idempresa', $model->idempresa)];
+        $where = [
+            new DataBaseWhere('autoaplicar', true),
+            new DataBaseWhere('idempresa', $model->idempresa)
+        ];
         foreach ($documentFormat->all($where, ['tipodoc' => 'DESC', 'codserie' => 'DESC']) as $format) {
             if ($format->tipodoc === $model->modelClassName() && $format->codserie === $model->codserie) {
                 return $format;
@@ -302,7 +305,7 @@ abstract class ExportBase
     protected function setFileName(string $name)
     {
         if (empty($this->fileName)) {
-            $this->fileName = \str_replace([' ', '"', "'", '/', '\\'], ['_', '_', '_', '_', '_'], $name);
+            $this->fileName = \str_replace([' ', '"', "'", '/', '\\', ','], '_', ToolBox::utils()->fixHtml($name));
         }
     }
 

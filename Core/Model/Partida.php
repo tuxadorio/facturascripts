@@ -28,7 +28,7 @@ use FacturaScripts\Dinamic\Model\Subcuenta as DinSubcuenta;
  * It is related to a accounting entry and a sub-account.
  *
  * @author Carlos García Gómez  <carlos@facturascripts.com>
- * @author Artex Trading sa     <jcuello@artextrading.com>
+ * @author Jose Antonio Cuello Principal <yopli2000@gmail.com>
  */
 class Partida extends Base\ModelOnChangeClass
 {
@@ -284,6 +284,21 @@ class Partida extends Base\ModelOnChangeClass
     {
         $this->codcontrapartida = $subaccount->codsubcuenta;
         $this->idcontrapartida = $subaccount->idsubcuenta;
+    }
+
+    /**
+     * Set dotted status to indicated value.
+     *
+     * @param bool $value
+     */
+    public function setDottedStatus(bool $value)
+    {
+        $sql = 'UPDATE ' . self::tableName() . ' SET punteada = ' . self::$dataBase->var2str($value)
+            . ' WHERE ' . self::primaryColumn() . ' = ' . self::$dataBase->var2str($this->primaryColumnValue());
+
+        if ($value !== $this->punteada && self::$dataBase->exec($sql)) {
+            $this->punteada = $value;
+        }
     }
 
     /**

@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2013-2020 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2013-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -70,18 +70,26 @@ abstract class BankAccount extends ModelClass
      * Returns the IBAN with or without spaces.
      *
      * @param bool $spaced
+     * @param bool $censure
      *
      * @return string
      */
-    public function getIban(bool $spaced = false)
+    public function getIban(bool $spaced = false, bool $censure = false)
     {
         $iban = \str_replace(' ', '', $this->iban);
+
+        /// split in groups
         $groups = [];
         for ($num = 0; $num < \strlen($iban); $num += self::GROUP_LENGTH) {
             $groups[] = \substr($iban, $num, self::GROUP_LENGTH);
         }
 
-        return $spaced ? \implode(' ', $groups) : $iban;
+        /// censore
+        if ($censure) {
+            $groups[1] = $groups[2] = $groups[3] = $groups[4] = 'XXXX';
+        }
+
+        return $spaced ? \implode(' ', $groups) : \implode('', $groups);
     }
 
     /**
@@ -110,7 +118,7 @@ abstract class BankAccount extends ModelClass
     public function test()
     {
         if (!empty($this->codcuenta) && false === \is_numeric($this->codcuenta)) {
-            $this->toolBox()->i18nLog()->error('invalid-number');
+            $this->toolBox()->i18nLog()->error('invalid-number', ['%number%' => $this->codcuenta]);
             return false;
         }
 

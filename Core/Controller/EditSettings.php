@@ -44,9 +44,8 @@ class EditSettings extends PanelController
     {
         $data = parent::getPageData();
         $data['menu'] = 'admin';
-        $data['submenu'] = 'control-panel';
-        $data['title'] = 'app-preferences';
-        $data['icon'] = 'fas fa-cogs';
+        $data['title'] = 'control-panel';
+        $data['icon'] = 'fas fa-tools';
         return $data;
     }
 
@@ -59,8 +58,8 @@ class EditSettings extends PanelController
     {
         $names = [];
         foreach ($this->toolBox()->files()->scanFolder(\FS_FOLDER . '/Dinamic/XMLView') as $fileName) {
-            if (0 === strpos($fileName, self::KEY_SETTINGS)) {
-                $names[] = substr($fileName, 0, -4);
+            if (0 === \strpos($fileName, self::KEY_SETTINGS)) {
+                $names[] = \substr($fileName, 0, -4);
             }
         }
 
@@ -154,6 +153,24 @@ class EditSettings extends PanelController
     }
 
     /**
+     * 
+     * @param string $viewName
+     */
+    protected function createDocTypeFilter(string $viewName)
+    {
+        $types = $this->codeModel->all('estados_documentos', 'tipodoc', 'tipodoc');
+
+        /// custom translation
+        foreach ($types as $key => $value) {
+            if (!empty($value->code)) {
+                $types[$key]->description = $this->toolBox()->i18n()->trans($value->code);
+            }
+        }
+
+        $this->views[$viewName]->addFilterSelect('tipodoc', 'doc-type', 'tipodoc', $types);
+    }
+
+    /**
      * Load views
      */
     protected function createViews()
@@ -179,6 +196,107 @@ class EditSettings extends PanelController
             $this->setSettings($name, 'btnDelete', false);
             $this->setSettings($name, 'btnNew', false);
         }
+
+        $this->createViewsApiKeys();
+        $this->createViewsIdFiscal();
+        $this->createViewSequences();
+        $this->createViewStates();
+        $this->createViewFormats();
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewsApiKeys(string $viewName = 'ListApiKey')
+    {
+        $this->addListView($viewName, 'ApiKey', 'api-keys', 'fas fa-key');
+        $this->views[$viewName]->addOrderBy(['id'], 'id');
+        $this->views[$viewName]->addOrderBy(['descripcion'], 'description');
+        $this->views[$viewName]->addOrderBy(['creationdate', 'id'], 'date', 2);
+        $this->views[$viewName]->addSearchFields(['description', 'apikey', 'nick']);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewsIdFiscal(string $viewName = 'EditIdentificadorFiscal')
+    {
+        $this->addEditListView($viewName, 'IdentificadorFiscal', 'fiscal-id', 'far fa-id-card');
+        $this->views[$viewName]->setInLine(true);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewFormats(string $viewName = 'ListFormatoDocumento')
+    {
+        $this->addListView($viewName, 'FormatoDocumento', 'printing-formats', 'fas fa-print');
+        $this->views[$viewName]->addOrderBy(['nombre'], 'name');
+        $this->views[$viewName]->addOrderBy(['titulo'], 'title');
+        $this->views[$viewName]->addSearchFields(['nombre', 'titulo', 'texto']);
+
+        /// Filters
+        $this->createDocTypeFilter($viewName);
+
+        $companies = $this->codeModel->all('empresas', 'idempresa', 'nombrecorto');
+        $this->views[$viewName]->addFilterSelect('idempresa', 'company', 'idempresa', $companies);
+
+        $series = $this->codeModel->all('series', 'codserie', 'descripcion');
+        $this->views[$viewName]->addFilterSelect('codserie', 'serie', 'codserie', $series);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewSequences(string $viewName = 'ListSecuenciaDocumento')
+    {
+        $this->addListView($viewName, 'SecuenciaDocumento', 'sequences', 'fas fa-code');
+        $this->views[$viewName]->addOrderBy(['codejercicio', 'codserie', 'tipodoc'], 'exercise', 2);
+        $this->views[$viewName]->addOrderBy(['codserie'], 'serie');
+        $this->views[$viewName]->addOrderBy(['numero'], 'number');
+        $this->views[$viewName]->addSearchFields(['patron', 'tipodoc']);
+
+        /// Filters
+        $this->createDocTypeFilter($viewName);
+
+        $companies = $this->codeModel->all('empresas', 'idempresa', 'nombrecorto');
+        $this->views[$viewName]->addFilterSelect('idempresa', 'company', 'idempresa', $companies);
+
+        $exercises = $this->codeModel->all('ejercicios', 'codejercicio', 'nombre');
+        $this->views[$viewName]->addFilterSelect('codejercicio', 'exercise', 'codejercicio', $exercises);
+
+        $series = $this->codeModel->all('series', 'codserie', 'descripcion');
+        $this->views[$viewName]->addFilterSelect('codserie', 'serie', 'codserie', $series);
+    }
+
+    /**
+     * 
+     * @param string $viewName
+     */
+    protected function createViewStates(string $viewName = 'ListEstadoDocumento')
+    {
+        $this->addListView($viewName, 'EstadoDocumento', 'states', 'fas fa-tags');
+        $this->views[$viewName]->addOrderBy(['idestado'], 'id');
+        $this->views[$viewName]->addOrderBy(['nombre'], 'name');
+        $this->views[$viewName]->addSearchFields(['nombre']);
+
+        /// Filters
+        $this->createDocTypeFilter($viewName);
+
+        $this->views[$viewName]->addFilterSelect('actualizastock', 'update-stock', 'actualizastock', [
+            ['code' => null, 'description' => '------'],
+            ['code' => -2, 'description' => $this->toolBox()->i18n()->trans('book')],
+            ['code' => -1, 'description' => $this->toolBox()->i18n()->trans('subtract')],
+            ['code' => 0, 'description' => $this->toolBox()->i18n()->trans('do-nothing')],
+            ['code' => 1, 'description' => $this->toolBox()->i18n()->trans('add')],
+            ['code' => 2, 'description' => $this->toolBox()->i18n()->trans('foresee')],
+        ]);
+        $this->views[$viewName]->addFilterCheckbox('predeterminado', 'default', 'predeterminado');
+        $this->views[$viewName]->addFilterCheckbox('editable', 'editable', 'editable');
     }
 
     /**
@@ -234,7 +352,7 @@ class EditSettings extends PanelController
      */
     private function getKeyFromViewName($viewName)
     {
-        return strtolower(substr($viewName, strlen(self::KEY_SETTINGS)));
+        return \strtolower(\substr($viewName, \strlen(self::KEY_SETTINGS)));
     }
 
     /**
@@ -245,16 +363,34 @@ class EditSettings extends PanelController
      */
     protected function loadData($viewName, $view)
     {
-        $code = $this->getKeyFromViewName($viewName);
-        $view->loadData($code);
-        if (empty($view->model->name)) {
-            $view->model->name = $code;
-        }
-
         switch ($viewName) {
+            case 'ListApiKey':
+                $view->loadData();
+                if (false === (bool) $this->toolBox()->appSettings()->get('default', 'enable_api', '0')) {
+                    $this->setSettings($viewName, 'active', false);
+                }
+                break;
+
+            case 'EditIdentificadorFiscal':
+                $view->loadData();
+                break;
+
             case 'SettingsDefault':
+                $code = $this->getKeyFromViewName($viewName);
+                $view->loadData($code);
+                if (empty($view->model->name)) {
+                    $view->model->name = $code;
+                }
                 $this->loadPaymentMethodValues($viewName);
                 $this->loadWarehouseValues($viewName);
+                break;
+
+            default:
+                $code = $this->getKeyFromViewName($viewName);
+                $view->loadData($code);
+                if (empty($view->model->name)) {
+                    $view->model->name = $code;
+                }
                 break;
         }
     }

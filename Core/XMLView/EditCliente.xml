@@ -31,7 +31,7 @@
             <column name="business-name" numcolumns="3" order="120" description="desc-business-name">
                 <widget type="text" fieldname="razonsocial" maxlength="100" />
             </column>
-            <column name="fiscal-id" titleurl="ListIdentificadorFiscal" numcolumns="2" order="130">
+            <column name="fiscal-id" titleurl="EditSettings?activetab=EditIdentificadorFiscal" numcolumns="2" order="130">
                 <widget type="select" fieldname="tipoidfiscal" required="true">
                     <values source="idsfiscales" fieldcode="tipoidfiscal" fieldtitle="tipoidfiscal" />
                 </widget>
@@ -93,7 +93,7 @@
                 </widget>
             </column>
             <column name="payment-days" description="desc-payment-days" numcolumns="3" order="150">
-                <widget type="text" fieldname="diaspago" icon="fas fa-calendar-alt" />
+                <widget type="text" fieldname="diaspago" />
             </column>
             <column name="current-risk" numcolumns="3" order="160">
                 <widget type="money" fieldname="riesgoalcanzado" readonly="true" />
@@ -109,7 +109,7 @@
                     <values source="retenciones" fieldcode="codretencion" fieldtitle="descripcion" />
                 </widget>
             </column>
-            <column name="subaccount" description="customer-subaccount-p" titleurl="ListCuenta" numcolumns="3" order="200">
+            <column name="subaccount" description="customer-subaccount-p" titleurl="ListCuenta" display="none" numcolumns="3" order="200">
                 <widget type="text" fieldname="codsubcuenta" maxlength="15" icon="fas fa-balance-scale" />
             </column>
         </group>
@@ -120,10 +120,10 @@
         </group>
         <group name="other" numcolumns="3">
             <column name="creation-date" numcolumns="12" order="100">
-                <widget type="date" fieldname="fechaalta" icon="fas fa-calendar-alt" readonly="true" />
+                <widget type="date" fieldname="fechaalta" readonly="true" />
             </column>
             <column name="date-of-suspension" numcolumns="12" order="110">
-                <widget type="date" fieldname="fechabaja" icon="fas fa-calendar-alt" />
+                <widget type="date" fieldname="fechabaja" />
             </column>
         </group>
     </columns>

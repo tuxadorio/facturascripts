@@ -81,6 +81,10 @@ abstract class TransformerDocument extends BusinessDocument
             }
 
             $newModelClass = self::MODEL_NAMESPACE . $docTrans->model2;
+            if (false === \class_exists($newModelClass)) {
+                continue;
+            }
+
             $newModel = new $newModelClass();
             if ($newModel->loadFromCode($docTrans->iddoc2)) {
                 $children[] = $newModel;
@@ -174,7 +178,7 @@ abstract class TransformerDocument extends BusinessDocument
     {
         if (null === self::$estados) {
             $statusModel = new EstadoDocumento();
-            self::$estados = $statusModel->all([], [], 0, 0);
+            self::$estados = $statusModel->all([], ['idestado' => 'ASC'], 0, 0);
         }
 
         $avaliables = [];
@@ -236,6 +240,10 @@ abstract class TransformerDocument extends BusinessDocument
             }
 
             $newModelClass = self::MODEL_NAMESPACE . $docTrans->model1;
+            if (false === \class_exists($newModelClass)) {
+                continue;
+            }
+
             $newModel = new $newModelClass();
             if ($newModel->loadFromCode($docTrans->iddoc1)) {
                 $parents[] = $newModel;
@@ -315,7 +323,12 @@ abstract class TransformerDocument extends BusinessDocument
         }
 
         /// generate the new document, when there are children
-        return $generator->generate($this, $status->generadoc, $newLines, $quantities) ? parent::onChange($field) : false;
+        if ($newLines) {
+            return $generator->generate($this, $status->generadoc, $newLines, $quantities) ? parent::onChange($field) : false;
+        }
+
+        /// no pending lines to generate a new document
+        return true;
     }
 
     /**

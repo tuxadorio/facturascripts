@@ -1,7 +1,7 @@
 <?php
 /**
  * This file is part of FacturaScripts
- * Copyright (C) 2017-2019 Carlos Garcia Gomez <carlos@facturascripts.com>
+ * Copyright (C) 2017-2021 Carlos Garcia Gomez <carlos@facturascripts.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as
@@ -22,6 +22,7 @@ use FacturaScripts\Core\Base\DataBase\DataBaseWhere;
 use FacturaScripts\Core\Model\Base\BusinessDocument;
 use FacturaScripts\Core\Model\Base\ModelClass;
 use FacturaScripts\Dinamic\Lib\PDF\PDFDocument;
+use FacturaScripts\Dinamic\Model\FormatoDocumento;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -45,7 +46,9 @@ class PDFExport extends PDFDocument
      */
     public function addBusinessDocPage($model): bool
     {
-        $this->format = $this->getDocumentFormat($model);
+        if (null === $this->format) {
+            $this->format = $this->getDocumentFormat($model);
+        }
 
         $this->newPage();
         $this->insertHeader($model->idempresa);
@@ -122,7 +125,8 @@ class PDFExport extends PDFDocument
     public function addModelPage($model, $columns, $title = ''): bool
     {
         $this->newPage();
-        $this->insertHeader();
+        $idempresa = isset($model->idempresa) ? $model->idempresa : null;
+        $this->insertHeader($idempresa);
 
         $tableCols = [];
         $tableColsTitle = [];
@@ -131,7 +135,7 @@ class PDFExport extends PDFDocument
             'showHeadings' => 0,
             'shaded' => 0,
             'lineCol' => [1, 1, 1],
-            'cols' => [],
+            'cols' => []
         ];
 
         /// Get the columns
@@ -202,10 +206,21 @@ class PDFExport extends PDFDocument
      * Blank document.
      * 
      * @param string $title
+     * @param int    $idformat
+     * @param string $langcode
      */
-    public function newDoc(string $title)
+    public function newDoc(string $title, int $idformat, string $langcode)
     {
         $this->setFileName($title);
+
+        if (!empty($idformat)) {
+            $this->format = new FormatoDocumento();
+            $this->format->loadFromCode($idformat);
+        }
+
+        if (!empty($langcode)) {
+            $this->i18n->setLang($langcode);
+        }
     }
 
     /**

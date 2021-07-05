@@ -28,7 +28,7 @@
             <column name="company-name" numcolumns="3" order="110">
                 <widget type="text" fieldname="nombre" maxlength="100" required="true" />
             </column>
-            <column name="fiscal-id" titleurl="ListIdentificadorFiscal" numcolumns="2" order="120">
+            <column name="fiscal-id" titleurl="EditSettings?activetab=EditIdentificadorFiscal" numcolumns="2" order="120">
                 <widget type="select" fieldname="tipoidfiscal" required="true">
                     <values source="idsfiscales" fieldcode="tipoidfiscal" fieldtitle="tipoidfiscal" />
                 </widget>
@@ -45,7 +45,7 @@
         </group>
         <group name="address" numcolumns="12">
             <column name="address" numcolumns="10" order="100">
-                <widget type="text" fieldname="direccion" maxlength="100" icon="fas fa-map-marked"/>
+                <widget type="text" fieldname="direccion" maxlength="100" icon="fas fa-map-marked" required="true" />
             </column>
             <column name="post-office-box" numcolumns="2" order="110">
                 <widget type="text" fieldname="apartado" maxlength="10" />

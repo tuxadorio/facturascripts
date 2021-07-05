@@ -60,7 +60,7 @@ class BusinessDocumentCode
     }
 
     /**
-     * 
+     *
      * @param SecuenciaDocumento $sequence
      * @param BusinessDocument   $document
      *
@@ -68,16 +68,7 @@ class BusinessDocumentCode
      */
     protected static function getNewNumber(&$sequence, &$document)
     {
-        /// get previous
-        $order = \strtolower(\FS_DB_TYPE) == 'postgresql' ? ['CAST(numero as integer)' => 'DESC'] : ['CAST(numero as unsigned)' => 'DESC'];
-        $where = [
-            new DataBaseWhere('codserie', $sequence->codserie),
-            new DataBaseWhere('idempresa', $sequence->idempresa)
-        ];
-        if ($sequence->codejercicio) {
-            $where[] = new DataBaseWhere('codejercicio', $sequence->codejercicio);
-        }
-        $previous = $document->all($where, $order, 0, self::GAP_LIMIT);
+        $previous = static::getPrevious($sequence, $document);
 
         /// find maximum number for this sequence data
         foreach ($previous as $lastDoc) {
@@ -95,7 +86,7 @@ class BusinessDocumentCode
             $preDate = $document->fecha;
             $preHour = $document->hora;
             foreach ($previous as $preDoc) {
-                if ($expectedNumber != $preDoc->numero) {
+                if ($expectedNumber != $preDoc->numero && $expectedNumber >= $sequence->inicio) {
                     /// hole found
                     $document->fecha = $preDate;
                     $document->hora = $preHour;
@@ -128,8 +119,28 @@ class BusinessDocumentCode
     }
 
     /**
+     *
+     * @param SecuenciaDocumento $sequence
+     * @param BusinessDocument   $document
+     *
+     * @return BusinessDocument[]
+     */
+    protected static function getPrevious(&$sequence, &$document)
+    {
+        $order = \strtolower(\FS_DB_TYPE) == 'postgresql' ? ['CAST(numero as integer)' => 'DESC'] : ['CAST(numero as unsigned)' => 'DESC'];
+        $where = [
+            new DataBaseWhere('codserie', $sequence->codserie),
+            new DataBaseWhere('idempresa', $sequence->idempresa)
+        ];
+        if ($sequence->codejercicio) {
+            $where[] = new DataBaseWhere('codejercicio', $sequence->codejercicio);
+        }
+        return $document->all($where, $order, 0, self::GAP_LIMIT);
+    }
+
+    /**
      * Finds sequence for this document.
-     * 
+     *
      * @param BusinessDocument $document
      *
      * @return SecuenciaDocumento
@@ -138,6 +149,7 @@ class BusinessDocumentCode
     {
         $selectedSequence = new SecuenciaDocumento();
         $patron = \substr(\strtoupper($document->modelClassName()), 0, 3) . '{EJE}{SERIE}{NUM}';
+        $long = $selectedSequence->longnumero;
 
         /// find sequence for this document and serie
         $sequence = new SecuenciaDocumento();
@@ -157,6 +169,7 @@ class BusinessDocumentCode
 
             /// use old pattern for the new sequence
             $patron = $seq->patron;
+            $long = $seq->longnumero;
         }
 
         /// sequence not found? Then create
@@ -165,6 +178,7 @@ class BusinessDocumentCode
             $selectedSequence->codserie = $document->codserie;
             $selectedSequence->idempresa = $document->idempresa;
             $selectedSequence->patron = $patron;
+            $selectedSequence->longnumero = $long;
             $selectedSequence->tipodoc = $document->modelClassName();
             $selectedSequence->usarhuecos = ('FacturaCliente' === $document->modelClassName());
             $selectedSequence->save();

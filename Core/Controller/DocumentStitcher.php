@@ -150,7 +150,10 @@ class DocumentStitcher extends Controller
     protected function addDocument($newDoc)
     {
         foreach ($this->documents as $doc) {
-            if ($doc->coddivisa != $newDoc->coddivisa || $doc->subjectColumnValue() != $newDoc->subjectColumnValue()) {
+            if ($doc->codalmacen != $newDoc->codalmacen ||
+                $doc->coddivisa != $newDoc->coddivisa ||
+                $doc->idempresa != $newDoc->idempresa ||
+                $doc->subjectColumnValue() != $newDoc->subjectColumnValue()) {
                 $this->toolBox()->i18nLog()->warning('incompatible-document', ['%code%' => $newDoc->codigo]);
                 return false;
             }
@@ -169,8 +172,7 @@ class DocumentStitcher extends Controller
     {
         $infoLine = $doc->getNewLine();
         $infoLine->cantidad = 0;
-        $infoLine->descripcion = $this->toolBox()->i18n()->trans($doc->modelClassName() . '-min')
-            . ' ' . $doc->codigo . "\n--------------------";
+        $infoLine->descripcion = $this->getDocInfoLineDescription($doc);
         $infoLine->iva = 0.0;
         $infoLine->irpf = 0.0;
         $infoLine->recargo = 0.0;
@@ -243,7 +245,7 @@ class DocumentStitcher extends Controller
                 $this->addBlankLine($newLines, $doc);
             }
 
-            if (\count($this->documents) > 1 && 'true' === $this->request->request->get('extralines', '')) {
+            if ('true' === $this->request->request->get('extralines', '')) {
                 $this->addInfoLine($newLines, $doc);
             }
 
@@ -296,6 +298,26 @@ class DocumentStitcher extends Controller
         $codes = \explode(',', $this->request->get('codes', ''));
         $newcodes = $this->request->get('newcodes', []);
         return empty($newcodes) ? $codes : \array_merge($codes, $newcodes);
+    }
+
+    /**
+     * 
+     * @param TransformerDocument $doc
+     *
+     * @return string
+     */
+    protected function getDocInfoLineDescription($doc): string
+    {
+        $description = $this->toolBox()->i18n()->trans($doc->modelClassName() . '-min') . ' ' . $doc->codigo;
+
+        if (isset($doc->numero2) && $doc->numero2) {
+            $description .= ' (' . $doc->numero2 . ')';
+        } elseif (isset($doc->numproveedor) && $doc->numproveedor) {
+            $description .= ' (' . $doc->numproveedor . ')';
+        }
+
+        $description .= ', ' . $doc->fecha . "\n--------------------";
+        return $description;
     }
 
     /**
@@ -362,6 +384,7 @@ class DocumentStitcher extends Controller
         $model = new $modelClass();
         $where = [
             new DataBaseWhere('editable', true),
+            new DataBaseWhere('codalmacen', $this->documents[0]->codalmacen),
             new DataBaseWhere('coddivisa', $this->documents[0]->coddivisa),
             new DataBaseWhere($model->subjectColumn(), $this->documents[0]->subjectColumnValue())
         ];

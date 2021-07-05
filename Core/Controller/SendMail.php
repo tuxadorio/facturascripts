@@ -38,8 +38,8 @@ use Symfony\Component\HttpFoundation\Response;
 class SendMail extends Controller
 {
 
-    /// 2 hours
-    const MAX_FILE_AGE = 7200;
+    /// 30 days
+    const MAX_FILE_AGE = 2592000;
     const MODEL_NAMESPACE = '\\FacturaScripts\\Dinamic\\Model\\';
 
     /**
@@ -82,6 +82,7 @@ class SendMail extends Controller
         parent::privateCore($response, $user, $permissions);
         $this->codeModel = new CodeModel();
         $this->newMail = new NewMail();
+        $this->newMail->setUser($this->user);
 
         /// Check if the email is configurate
         if (false === $this->newMail->canSendMail()) {
@@ -230,8 +231,11 @@ class SendMail extends Controller
      */
     protected function send()
     {
-        $this->newMail->fromNick = $this->user->nick;
-        $this->newMail->addReplyTo($this->user->email, $this->user->nick);
+        if ($this->newMail->fromEmail === $this->user->email) {
+            /// do not add replyTo
+        } elseif ((bool) $this->request->request->get('replyto', '0')) {
+            $this->newMail->addReplyTo($this->user->email, $this->user->nick);
+        }
 
         $this->newMail->title = $this->request->request->get('subject', '');
         $this->newMail->text = $this->request->request->get('body', '');
@@ -280,6 +284,28 @@ class SendMail extends Controller
 
         $model = new $className();
         $model->loadFromCode($this->request->get('modelCode', ''));
+        switch ($model->modelClassName()) {
+            case 'AlbaranCliente':
+                $this->newMail->title = $this->toolBox()->i18n()->trans('delivery-note-email-subject', ['%code%' => $model->codigo]);
+                $this->newMail->text = $this->toolBox()->i18n()->trans('delivery-note-email-text', ['%code%' => $model->codigo]);
+                break;
+
+            case 'FacturaCliente':
+                $this->newMail->title = $this->toolBox()->i18n()->trans('invoice-email-subject', ['%code%' => $model->codigo]);
+                $this->newMail->text = $this->toolBox()->i18n()->trans('invoice-email-text', ['%code%' => $model->codigo]);
+                break;
+
+            case 'PedidoCliente':
+                $this->newMail->title = $this->toolBox()->i18n()->trans('order-email-subject', ['%code%' => $model->codigo]);
+                $this->newMail->text = $this->toolBox()->i18n()->trans('order-email-text', ['%code%' => $model->codigo]);
+                break;
+
+            case 'PresupuestoCliente':
+                $this->newMail->title = $this->toolBox()->i18n()->trans('estimation-email-subject', ['%code%' => $model->codigo]);
+                $this->newMail->text = $this->toolBox()->i18n()->trans('estimation-email-text', ['%code%' => $model->codigo]);
+                break;
+        }
+
         if (\property_exists($model, 'email')) {
             $this->newMail->addAddress($model->email);
             return;
@@ -318,7 +344,19 @@ class SendMail extends Controller
         if ($model->loadFromCode($modelCode) && \property_exists($className, 'femail')) {
             $model->femail = \date(Cliente::DATE_STYLE);
             if (false === $model->save()) {
-                $this->toolBox()->i18nLog()->error('error-saving-data');
+                $this->toolBox()->i18nLog()->error('record-save-error');
+                return;
+            }
+
+            $subject = $model->getSubject();
+            if (!empty($subject->email)) {
+                return;
+            }
+
+            foreach ($this->newMail->getToAddresses() as $email) {
+                $subject->email = $email;
+                $subject->save();
+                return;
             }
         }
     }

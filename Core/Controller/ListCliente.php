@@ -83,21 +83,16 @@ class ListCliente extends ListController
     protected function createViewContacts(string $viewName = 'ListContacto')
     {
         $this->addView($viewName, 'Contacto', 'addresses-and-contacts', 'fas fa-address-book');
-        $this->addSearchFields($viewName, ['nombre', 'apellidos', 'email', 'empresa', 'observaciones', 'telefono1', 'telefono2', 'lastip']);
+        $this->addSearchFields($viewName, [
+            'apellidos', 'codpostal', 'descripcion', 'direccion', 'email', 'empresa', 'lastip',
+            'nombre', 'observaciones', 'telefono1', 'telefono2'
+        ]);
         $this->addOrderBy($viewName, ['descripcion'], 'description');
         $this->addOrderBy($viewName, ['direccion'], 'address');
         $this->addOrderBy($viewName, ['nombre'], 'name');
         $this->addOrderBy($viewName, ['fechaalta'], 'creation-date', 2);
 
         /// filters
-        $values = [
-            [
-                'label' => $this->toolBox()->i18n()->trans('customers'),
-                'where' => [new DataBaseWhere('codcliente', null, 'IS NOT')]
-            ]
-        ];
-        $this->addFilterSelectWhere($viewName, 'type', $values);
-
         $countries = $this->codeModel->all('paises', 'codpais', 'nombre');
         $this->addFilterSelect($viewName, 'codpais', 'country', 'codpais', $countries);
 
@@ -134,12 +129,16 @@ class ListCliente extends ListController
 
         /// filters
         $i18n = $this->toolBox()->i18n();
-        $values = [
+        $this->addFilterSelectWhere($viewName, 'status', [
             ['label' => $i18n->trans('only-active'), 'where' => [new DataBaseWhere('debaja', false)]],
             ['label' => $i18n->trans('only-suspended'), 'where' => [new DataBaseWhere('debaja', true)]],
             ['label' => $i18n->trans('all'), 'where' => []]
-        ];
-        $this->addFilterSelectWhere($viewName, 'status', $values);
+        ]);
+        $this->addFilterSelectWhere($viewName, 'type', [
+            ['label' => $i18n->trans('all'), 'where' => []],
+            ['label' => $i18n->trans('is-person'), 'where' => [new DataBaseWhere('personafisica', true)]],
+            ['label' => $i18n->trans('company'), 'where' => [new DataBaseWhere('personafisica', false)]]
+        ]);
 
         $groupValues = $this->codeModel->all('gruposclientes', 'codgrupo', 'nombre');
         $this->addFilterSelect($viewName, 'codgrupo', 'group', 'codgrupo', $groupValues);
